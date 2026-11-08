@@ -1,0 +1,11 @@
+{
+  "id": "colorful",
+  "name": "Colorful",
+  "description": "A vivid accent color with rounded interface elements.",
+  "variables": {
+    "accentColor": "#e35d9b",
+    "borderRadius": "10px"
+  },
+  "customCss": "",
+  "moduleCss": {}
+}

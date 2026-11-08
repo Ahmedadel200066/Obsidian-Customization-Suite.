@@ -1,0 +1,4 @@
+.customization-studio-settings textarea {
+  min-height: 7em;
+  font-family: var(--font-monospace);
+}

@@ -1,0 +1,13 @@
+{
+  "id": "dark-academia",
+  "name": "Dark Academia",
+  "description": "Warm parchment accents for a quiet reading workspace.",
+  "variables": {
+    "accentColor": "#b18a58",
+    "surfaceColor": "#29231e",
+    "textColor": "#e6dac5",
+    "borderRadius": "6px"
+  },
+  "customCss": "",
+  "moduleCss": {}
+}

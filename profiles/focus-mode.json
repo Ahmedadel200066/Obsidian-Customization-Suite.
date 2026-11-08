@@ -1,0 +1,13 @@
+{
+  "id": "focus-mode",
+  "name": "Focus Mode",
+  "description": "A low-distraction neutral palette and compact corners.",
+  "variables": {
+    "accentColor": "#858f99",
+    "surfaceColor": "#202326",
+    "textColor": "#d2d5d8",
+    "borderRadius": "2px"
+  },
+  "customCss": "",
+  "moduleCss": {}
+}
