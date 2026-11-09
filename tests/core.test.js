@@ -3,7 +3,7 @@ const test = require("node:test");
 const { SettingsManager } = require("../core/settings-manager");
 const { ProfileManager } = require("../core/profile-manager");
 const { ThemeEngine } = require("../core/theme-engine");
-const { ModuleManager } = require("../core/module-manager");
+const { ModuleManager, MODULES } = require("../core/module-manager");
 
 test("loads built-in profiles and creates, updates, and deletes custom profiles", async () => {
   const persisted = [];
@@ -17,6 +17,8 @@ test("loads built-in profiles and creates, updates, and deletes custom profiles"
 
   assert.equal(profiles.getProfiles().length, 5);
   assert.equal(profiles.getActiveProfile().id, "minimal");
+  assert.equal(MODULES.length, 3);
+  assert.deepEqual(MODULES.map((module) => module.id), ["kanban", "spaced-repetition", "bases"]);
 
   const custom = profiles.createCustomProfile("My Reading Setup");
   profiles.updateActiveProfile({
@@ -27,7 +29,17 @@ test("loads built-in profiles and creates, updates, and deletes custom profiles"
 
   await settingsManager.save();
   assert.equal(persisted[0].customProfiles[0].name, "My Reading Setup");
+
+  const exported = profiles.exportProfile(custom.id);
+  assert.match(exported, /"id": "custom-my-reading-setup"/);
+
+  const reimported = profiles.importProfile(exported);
+  assert.equal(reimported.name, "My Reading Setup");
+
   profiles.deleteCustomProfile(custom.id);
+  assert.equal(profiles.getActiveProfile().id, reimported.id);
+  assert.equal(settingsManager.settings.customProfiles.length, 1);
+  profiles.deleteCustomProfile(reimported.id);
   assert.equal(profiles.getActiveProfile().id, "minimal");
   assert.equal(settingsManager.settings.customProfiles.length, 0);
 });

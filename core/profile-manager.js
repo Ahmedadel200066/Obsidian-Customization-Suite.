@@ -82,6 +82,24 @@ class ProfileManager {
     this.customProfiles = [];
   }
 
+  importProfile(raw) {
+    const imported = validateProfile(JSON.parse(raw), this.knownModuleIds);
+    const uniqueId = this.getProfile(imported.id) ? `custom-${imported.id}` : imported.id;
+    const profile = validateProfile({ ...imported, id: uniqueId }, this.knownModuleIds);
+    this.customProfiles.push(profile);
+    this.settingsManager.settings.customProfiles = this.customProfiles;
+    this.settingsManager.settings.activeProfileId = profile.id;
+    return profile;
+  }
+
+  exportProfile(id) {
+    const profile = this.getProfile(id);
+    if (!profile) {
+      throw new Error(`Unknown profile "${id}".`);
+    }
+    return JSON.stringify(profile, null, 2);
+  }
+
   load() {
     this.customProfiles = this.settingsManager.settings.customProfiles.map((profile) =>
       validateProfile(profile, this.knownModuleIds)

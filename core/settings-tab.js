@@ -84,6 +84,37 @@ class CustomizationSettingTab extends PluginSettingTab {
         .setValue(activeProfile.customCss)
         .onChange((value) => this.updateProfile({ customCss: value })));
 
+    new Setting(containerEl)
+      .setName("Export profile")
+      .setDesc("Copy the active profile as JSON to share or back up its configuration.")
+      .addButton((button) => button
+        .setButtonText("Copy JSON")
+        .onClick(() => this.runChange(async () => {
+          const json = this.plugin.profileManager.exportProfile(activeProfile.id);
+          await navigator.clipboard.writeText(json);
+          new Notice("Customization Studio: profile JSON copied to the clipboard.");
+        })));
+
+    new Setting(containerEl)
+      .setName("Import profile")
+      .setDesc("Paste saved JSON and import it as a new custom profile.")
+      .addTextArea((text) => text
+        .setPlaceholder("{\n  \"id\": \"custom-imported\", ...\n}")
+        .onChange((value) => {
+          this.importText = value;
+        }))
+      .addButton((button) => button
+        .setButtonText("Import")
+        .onClick(() => this.runChange(async () => {
+          if (!this.importText || !this.importText.trim()) {
+            throw new Error("Paste profile JSON before importing.");
+          }
+          const profile = this.plugin.profileManager.importProfile(this.importText);
+          await this.plugin.saveCustomization();
+          this.display();
+          new Notice(`Customization Studio: imported profile "${profile.name}".`);
+        })));
+
     this.displayModuleSettings(containerEl, activeProfile, true);
 
     if (this.plugin.profileManager.customProfiles.some((profile) => profile.id === activeProfile.id)) {

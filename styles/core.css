@@ -1,4 +1,24 @@
+.customization-studio-settings {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 0 0 2rem;
+}
+
+.customization-studio-settings .setting-item {
+  border-radius: var(--radius-m, 10px);
+  border: 1px solid var(--background-modifier-border, rgba(255, 255, 255, 0.08));
+  background: rgba(255, 255, 255, 0.015);
+  padding: 0.75rem 1rem;
+  margin: 0.5rem 0;
+}
+
 .customization-studio-settings textarea {
   min-height: 7em;
   font-family: var(--font-monospace);
+  border-radius: var(--radius-m, 10px);
+}
+
+.customization-studio-settings h2,
+.customization-studio-settings h3 {
+  margin-top: 0.5rem;
 }
