@@ -1,4 +1,4 @@
-const { Plugin } = require("obsidian");
+const { Plugin, Notice } = require("obsidian");
 const { SettingsManager } = require("./core/settings-manager");
 const { ProfileManager } = require("./core/profile-manager");
 const { ThemeEngine } = require("./core/theme-engine");
@@ -6,21 +6,32 @@ const { ModuleManager } = require("./core/module-manager");
 const { CustomizationSettingTab } = require("./core/settings-tab");
 
 module.exports = class CustomizationStudioPlugin extends Plugin {
+  notifyUser(message) {
+    new Notice(message);
+  }
+
   async onload() {
-    this.settingsManager = new SettingsManager(this);
-    await this.settingsManager.load();
+    try {
+      this.settingsManager = new SettingsManager(this);
+      await this.settingsManager.load();
 
-    this.profileManager = new ProfileManager(this.settingsManager);
-    this.profileManager.load();
+      this.profileManager = new ProfileManager(this.settingsManager);
+      this.profileManager.load();
 
-    this.themeEngine = new ThemeEngine(this);
-    this.moduleManager = new ModuleManager(this);
-    this.moduleManager.load();
-    await this.themeEngine.loadCoreCss();
+      this.themeEngine = new ThemeEngine(this);
+      await this.themeEngine.loadCoreCss();
 
-    this.addSettingTab(new CustomizationSettingTab(this.app, this));
-    this.applyCustomization();
-    this.app.workspace.onLayoutReady(() => this.moduleManager.refresh());
+      this.moduleManager = new ModuleManager(this);
+      this.moduleManager.load();
+      this.addSettingTab(new CustomizationSettingTab(this.app, this));
+      this.applyCustomization();
+      this.app.workspace.onLayoutReady(() => this.moduleManager.refreshWithNotice());
+    } catch (error) {
+      console.error("Customization Studio failed to start.", error);
+      new Notice(`Customization Studio failed to start: ${error.message}`);
+      this.cleanup();
+      throw error;
+    }
   }
 
   applyCustomization() {
@@ -30,12 +41,26 @@ module.exports = class CustomizationStudioPlugin extends Plugin {
   }
 
   async saveCustomization() {
-    await this.settingsManager.save();
     this.applyCustomization();
+    return this.settingsManager.scheduleSave();
   }
 
-  onunload() {
-    this.themeEngine?.unload();
+  cleanup() {
     this.moduleManager?.unload();
+    this.themeEngine?.unload();
+  }
+
+  async onunload() {
+    let saveError;
+    try {
+      await this.settingsManager?.flush();
+    } catch (error) {
+      saveError = error;
+      console.error("Customization Studio could not persist its latest settings during unload.", error);
+      new Notice(`Customization Studio could not save the latest settings: ${error.message}`);
+    } finally {
+      this.settingsManager?.settleWaiters(saveError);
+      this.cleanup();
+    }
   }
 };

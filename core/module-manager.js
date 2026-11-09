@@ -3,60 +3,79 @@ const MODULES = require("../modules");
 class ModuleManager {
   constructor(plugin) {
     this.plugin = plugin;
-    this.themeEngine = null;
-    this.moduleStyles = new Map();
     this.modules = MODULES;
+    this.controllers = new Map();
   }
 
   load() {
-    this.themeEngine = this.plugin.themeEngine;
+    for (const module of this.modules) {
+      const controller = module.createController(this.plugin, this, module);
+      this.controllers.set(module.id, controller);
+      controller.start();
+    }
+
+    this.plugin.registerEvent(
+      this.plugin.app.workspace.on("layout-change", () => this.refreshWithNotice())
+    );
     this.plugin.register(() => this.unload());
   }
 
   isEnabled(moduleId) {
-    return this.plugin.settingsManager.settings.moduleEnabled[moduleId] !== false;
+    const profile = this.plugin.profileManager.getActiveProfile();
+    return profile.moduleEnabled[moduleId] !== false;
   }
 
   setEnabled(moduleId, enabled) {
-    if (!this.modules.some((module) => module.id === moduleId)) {
+    if (!this.controllers.has(moduleId)) {
       throw new Error(`Unknown customization module "${moduleId}".`);
     }
-    this.plugin.settingsManager.settings.moduleEnabled[moduleId] = enabled;
+    this.plugin.profileManager.setModuleEnabled(moduleId, enabled);
   }
 
   isTargetPluginEnabled(module) {
-    return module.pluginIds.some((pluginId) => this.plugin.app.plugins.enabledPlugins.has(pluginId));
+    if (module.target.type === "core") {
+      const internalPlugins = this.plugin.app.internalPlugins;
+      if (!internalPlugins) return false;
+      for (const pluginId of module.target.ids) {
+        const plugin = typeof internalPlugins.getPluginById === "function"
+          ? internalPlugins.getPluginById(pluginId)
+          : internalPlugins.plugins?.[pluginId];
+        if (plugin?.enabled === true) return true;
+        if (typeof internalPlugins.getEnabledPluginById === "function" &&
+            internalPlugins.getEnabledPluginById(pluginId)) return true;
+      }
+      return false;
+    }
+
+    const plugins = this.plugin.app.plugins;
+    for (const pluginId of module.target.ids) {
+      if (plugins?.enabledPlugins?.has(pluginId)) return true;
+      if (plugins?.getPlugin?.(pluginId)) return true;
+    }
+    return false;
+  }
+
+  getDetectedColumns(moduleId) {
+    const controller = this.controllers.get(moduleId);
+    return controller?.getColumnNames?.() || [];
   }
 
   refresh(profile = this.plugin.profileManager.getActiveProfile()) {
-    const activeIds = [];
-    for (const module of this.modules) {
-      const styleId = `module-${module.id}`;
-      const css = profile.moduleCss[module.id] || "";
-      if (!this.isEnabled(module.id) || !this.isTargetPluginEnabled(module)) {
-        this.moduleStyles.get(module.id)?.remove();
-        this.moduleStyles.delete(module.id);
-        continue;
-      }
+    for (const controller of this.controllers.values()) controller.refresh(profile);
+  }
 
-      activeIds.push(module.id);
-      let style = this.moduleStyles.get(module.id);
-      if (!style) {
-        style = this.plugin.app.workspace.containerEl.ownerDocument.createElement("style");
-        style.dataset.customizationStudioStyle = styleId;
-        this.plugin.app.workspace.containerEl.ownerDocument.head.appendChild(style);
-        this.moduleStyles.set(module.id, style);
-        this.plugin.register(() => style.remove());
-      }
-      style.textContent = css;
+  refreshWithNotice() {
+    try {
+      this.refresh();
+    } catch (error) {
+      console.error("Customization Studio failed to update module styles after a workspace change.", error);
+      this.plugin.notifyUser(`Customization Studio could not update a module: ${error.message}`);
     }
-    this.plugin.app.workspace.containerEl.ownerDocument.body.dataset.customizationStudioModules = activeIds.join(" ");
   }
 
   unload() {
-    for (const style of this.moduleStyles.values()) style.remove();
-    this.moduleStyles.clear();
-    delete this.plugin.app.workspace.containerEl.ownerDocument.body.dataset.customizationStudioModules;
+    for (const controller of this.controllers.values()) controller.unload();
+    this.controllers.clear();
   }
 }
 

@@ -1,21 +1,52 @@
 .customization-studio-settings {
-  max-width: 960px;
+  max-width: 1100px;
   margin: 0 auto;
   padding: 0 0 2rem;
 }
 
-.customization-studio-settings .setting-item {
+.customization-studio-settings .cs-section,
+.customization-studio-settings .cs-module-section,
+.customization-studio-settings .cs-subsection {
+  border: 1px solid var(--background-modifier-border, rgba(127, 127, 127, 0.25));
   border-radius: var(--radius-m, 10px);
-  border: 1px solid var(--background-modifier-border, rgba(255, 255, 255, 0.08));
-  background: rgba(255, 255, 255, 0.015);
-  padding: 0.75rem 1rem;
-  margin: 0.5rem 0;
+  margin: 0.75rem 0;
+  padding: 0 1rem;
+  background: var(--background-primary);
+}
+
+.customization-studio-settings .cs-section > summary,
+.customization-studio-settings .cs-module-section > summary,
+.customization-studio-settings .cs-subsection > summary {
+  cursor: pointer;
+  font-weight: var(--font-semibold, 600);
+  padding: 1rem 0;
+}
+
+.customization-studio-settings .cs-module-section {
+  margin-inline-start: 0.5rem;
+}
+
+.customization-studio-settings .cs-subsection {
+  background: var(--background-secondary);
+}
+
+.customization-studio-settings .setting-item {
+  border-top: 1px solid var(--background-modifier-border, rgba(127, 127, 127, 0.18));
+  padding: 0.65rem 0;
 }
 
 .customization-studio-settings textarea {
-  min-height: 7em;
+  min-height: 8em;
   font-family: var(--font-monospace);
   border-radius: var(--radius-m, 10px);
+}
+
+.customization-studio-settings .cs-code-input {
+  min-width: min(45vw, 520px);
+}
+
+.customization-studio-settings .setting-item-control .slider {
+  min-width: 140px;
 }
 
 .customization-studio-settings h2,

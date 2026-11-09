@@ -5,10 +5,16 @@ const DEFAULT_SETTINGS = {
 };
 
 class SettingsManager {
-  constructor(plugin) {
+  constructor(plugin, debounceMs = 300) {
     this.plugin = plugin;
     this.settings = { ...DEFAULT_SETTINGS };
+    this.debounceMs = debounceMs;
+    this.revision = 0;
+    this.dirty = false;
+    this.timer = null;
+    this.flushPromise = null;
     this.saveQueue = Promise.resolve();
+    this.waiters = [];
   }
 
   async load() {
@@ -48,11 +54,61 @@ class SettingsManager {
     };
   }
 
+  scheduleSave(delay = this.debounceMs) {
+    this.dirty = true;
+    this.revision += 1;
+    const promise = new Promise((resolve, reject) => this.waiters.push({ resolve, reject }));
+    clearTimeout(this.timer);
+    this.timer = setTimeout(() => {
+      this.timer = null;
+      this.flush().then(
+        () => this.settleWaiters(),
+        (error) => this.settleWaiters(error)
+      );
+    }, delay);
+    return promise;
+  }
+
   async save() {
+    return this.scheduleSave(0);
+  }
+
+  async flush() {
+    clearTimeout(this.timer);
+    this.timer = null;
+    if (this.flushPromise) {
+      await this.flushPromise;
+      if (this.dirty) return this.flush();
+      return;
+    }
+    if (!this.dirty) return;
+
     const snapshot = JSON.parse(JSON.stringify(this.settings));
-    const pending = this.saveQueue.catch(() => undefined).then(() => this.plugin.saveData(snapshot));
+    const savedRevision = this.revision;
+    this.dirty = false;
+    const pending = this.saveQueue
+      .catch(() => undefined)
+      .then(() => this.plugin.saveData(snapshot));
     this.saveQueue = pending;
-    await pending;
+    this.flushPromise = pending;
+    try {
+      await pending;
+      if (this.revision !== savedRevision) this.dirty = true;
+    } catch (error) {
+      this.dirty = true;
+      throw error;
+    } finally {
+      this.flushPromise = null;
+    }
+    if (this.dirty) return this.flush();
+  }
+
+  settleWaiters(error) {
+    const waiters = this.waiters.splice(0);
+    for (const waiter of waiters) {
+      if (error) waiter.reject(error);
+      else waiter.resolve();
+    }
   }
 }
 
