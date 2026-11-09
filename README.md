@@ -43,11 +43,28 @@ controller, observer lifecycle, and generated CSS. Add future modules to
 
 The Obsidian plugin directory must be named after the manifest ID:
 
-1. Copy the **contents** of this repository directly into
+1. Build the distributable package:
+
+   ```sh
+   npm ci
+   npm run build
+   ```
+
+2. Copy the **contents of `dist/`** into
    `<vault>/.obsidian/plugins/customization-studio/`.
-2. Verify `manifest.json`, `main.js`, `core/`, `modules/`, `profiles/`, and
-   `styles/` are directly inside that folder, not nested one level deeper.
-3. Enable **Customization Studio** under Community plugins.
+3. Verify the generated `main.js`, `manifest.json`, and `styles/` are directly
+   inside that folder, not nested one level deeper.
+4. Enable **Customization Studio** under Community plugins.
+
+Obsidian loads the conventional `main.js` entry point. The build bundles the
+modular source tree into `dist/main.js` and keeps `obsidian` external for host
+API access. Profiles are bundled into the output; the package step copies the
+manifest and styles alongside it. Do not install the unbundled source tree.
+
+For development, run `npm run dev` to watch source changes and refresh the
+package in `dist/`. Install `dist/` into a test vault to exercise the plugin.
+The source entry point is `src/main.js`; its modular imports remain in `core/`,
+`modules/`, and `profiles/`.
 
 The `styles/core.css` loader reads
 `<vault>/.obsidian/plugins/customization-studio/styles/core.css`. If that
@@ -57,7 +74,7 @@ Obsidian 1.9.0 or later is required for Bases.
 Run the automated tests from this repository with:
 
 ```sh
-node --test tests/*.test.js
+npm test
 ```
 
 ## Verification limits

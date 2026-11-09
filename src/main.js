@@ -1,9 +1,9 @@
 const { Plugin, Notice } = require("obsidian");
-const { SettingsManager } = require("./core/settings-manager");
-const { ProfileManager } = require("./core/profile-manager");
-const { ThemeEngine } = require("./core/theme-engine");
-const { ModuleManager } = require("./core/module-manager");
-const { CustomizationSettingTab } = require("./core/settings-tab");
+const { SettingsManager } = require("../core/settings-manager");
+const { ProfileManager } = require("../core/profile-manager");
+const { ThemeEngine } = require("../core/theme-engine");
+const { ModuleManager } = require("../core/module-manager");
+const { CustomizationSettingTab } = require("../core/settings-tab");
 
 module.exports = class CustomizationStudioPlugin extends Plugin {
   notifyUser(message) {
