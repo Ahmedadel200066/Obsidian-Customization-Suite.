@@ -118,4 +118,3 @@ styling is not provided.
 - [Spaced Repetition source](https://github.com/st3v3nmw/obsidian-spaced-repetition),
   manifest ID `obsidian-spaced-repetition`, version 1.15.4.
 - [Bases CSS variables](https://github.com/obsidianmd/obsidian-developer-docs/blob/1c26772ac13d6e9870c865936d389fdfe694e742/en/Reference/CSS%20variables/Editor/Bases.md).
-.
