@@ -5,8 +5,7 @@
   "variables": {
     "accentColor": "#858f99",
     "surfaceColor": "#202326",
-    "textColor": "#d2d5d8",
-    "borderRadius": "2px"
+    "textColor": "#d2d5d8"
   },
   "customCss": "",
   "moduleCss": {}

@@ -21,6 +21,7 @@ const SCHEMA = {
   buttonHeight: { type: "range", default: 48, min: 32, max: 80 },
   buttonGap: { type: "range", default: 8, min: 0, max: 32 },
   transitionDuration: { type: "range", default: 180, min: 0, max: 600 },
+  diagnostics: { type: "boolean", default: false },
   customCss: { type: "text", default: "", maxLength: 10000 }
 };
 
@@ -62,6 +63,15 @@ const CONTROL_GROUPS = [
   {
     name: "Motion",
     controls: [{ key: "transitionDuration", name: "Hover transition", type: "range", unit: "ms" }]
+  },
+  {
+    name: "Diagnostics",
+    controls: [{
+      key: "diagnostics",
+      name: "Enable development diagnostics",
+      type: "boolean",
+      desc: "Log detection and matched element counts only; flashcard text is never logged."
+    }]
   }
 ];
 

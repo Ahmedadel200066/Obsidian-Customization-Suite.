@@ -1,5 +1,6 @@
 module.exports = {
   root: ".sr-card-container",
+  hidden: ".sr-is-hidden",
   content: ".sr-scroll-wrapper .sr-content",
   context: ".sr-context",
   response: ".sr-response",

@@ -2,7 +2,7 @@
   "name": "customization-studio",
   "version": "0.1.0",
   "private": true,
-  "description": "Build tooling for the Customization Studio Obsidian plugin.",
+  "description": "A modular visual customization plugin for Obsidian.",
   "scripts": {
     "build": "node build.mjs",
     "dev": "node build.mjs --watch",

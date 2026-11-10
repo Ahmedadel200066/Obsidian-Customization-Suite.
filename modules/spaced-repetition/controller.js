@@ -73,21 +73,33 @@ function styles(settings) {
 }
 .sr-card-container ${selectors.button}:disabled {
   opacity: 0.6;
-}
-.sr-deck-container .sr-bg-red {
-  background-color: var(--cs-sr-again, ${settings.againColor}) !important;
-}
-.sr-deck-container .sr-bg-yellow {
-  background-color: var(--cs-sr-hard, ${settings.hardColor}) !important;
-}
-.sr-deck-container .sr-bg-green {
-  background-color: var(--cs-sr-good, ${settings.goodColor}) !important;
-}
-.sr-deck-container .sr-bg-blue {
-  background-color: var(--cs-sr-easy, ${settings.easyColor}) !important;
 }`;
 }
 
-class SpacedRepetitionController extends BaseModuleController {}
+class SpacedRepetitionController extends BaseModuleController {
+  refresh(profile) {
+    super.refresh(profile);
+    if (!this.settings.diagnostics) return;
+
+    const detected = this.manager.isTargetPluginEnabled(this.module);
+    let cards = 0;
+    let controls = 0;
+    let visibleViews = 0;
+    for (const root of this.roots.keys()) {
+      cards += root.matches?.(selectors.root) ? 1 : 0;
+      controls += root.querySelectorAll(selectors.button).length;
+      if (!root.matches?.(selectors.hidden)) visibleViews += 1;
+    }
+    console.info("[Customization Studio] Spaced Repetition diagnostics", {
+      detected,
+      enabled: profile.moduleEnabled[this.module.id] !== false,
+      reviewViewOpen: visibleViews > 0,
+      matchedRoots: this.roots.size,
+      cards,
+      reviewControls: controls,
+      stylesInjected: Boolean(this.style?.parentNode)
+    });
+  }
+}
 
 module.exports = { SpacedRepetitionController, styles };

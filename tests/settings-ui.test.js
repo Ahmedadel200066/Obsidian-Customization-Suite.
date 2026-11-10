@@ -8,6 +8,8 @@ class FakeElement {
   constructor() {
     this.children = [];
     this.dataset = {};
+    this.style = {};
+    this.attributes = new Map();
     this.inputEl = { addClass() {}, addEventListener() {} };
   }
 
@@ -20,6 +22,8 @@ class FakeElement {
     this.children.push(element);
     return element;
   }
+
+  setAttribute(name, value) { this.attributes.set(name, value); }
 }
 
 class FakeComponent {
@@ -59,7 +63,15 @@ class FakeSetting {
     if (component.change) {
       FakeSetting.actions.push({
         name: this.name,
+        component,
         run: (value) => component.change(value)
+      });
+    }
+    if (component.click) {
+      FakeSetting.actions.push({
+        name: this.name,
+        component,
+        run: () => component.click()
       });
     }
     return this;
@@ -130,14 +142,41 @@ test("settings UI renders visual controls and previews/persists module edits", a
     "Question and answer size",
     "Show answer button",
     "Row height",
-    "Group spacing"
+    "Group spacing",
+    "Tab bar opacity",
+    "Tab bar gradient color",
+    "Tab bar gradient direction",
+    "Tab bar gradient intensity"
   ]) {
     assert.ok(labels.has(label), `Expected visual control "${label}" to render.`);
   }
+  assert.equal(labels.has("Interface corner radius"), false);
 
   const columnColor = FakeSetting.actions.find((action) => action.name === "Default column color");
   await columnColor.run("#123456");
   assert.equal(profiles.getActiveProfile().modules.kanban.columnBackground, "#123456");
   assert.equal(previewCount, 1);
   assert.equal(saveCount, 1);
+
+  const accentColor = FakeSetting.actions.find((action) => action.name === "Accent color");
+  await accentColor.run("#abcdef");
+  assert.equal(tab.profilePreview.swatches[0].style.backgroundColor, "#abcdef");
+
+  profiles.updateActiveProfile({
+    variables: { accentColor: "#123456", tabBarOpacity: 42, tabBarGradientIntensity: 30 }
+  });
+  tab.display();
+  const reset = FakeSetting.actions.filter((action) => action.name === "Reset global appearance").at(-1);
+  await reset.run();
+  assert.deepEqual(
+    profiles.getActiveProfile().variables,
+    profiles.builtInProfiles[0].variables
+  );
+  assert.equal(tab.profilePreview.swatches[0].style.backgroundColor, "#7c6ce7");
+  const resetAccent = FakeSetting.actions
+    .filter((action) => action.name === "Accent color")
+    .at(-1);
+  assert.equal(resetAccent.component.value, "#7c6ce7");
+  assert.equal(previewCount, 3);
+  assert.equal(saveCount, 3);
 });

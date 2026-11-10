@@ -1,120 +1,232 @@
 # Customization Studio
 
-Customization Studio is a non-invasive Obsidian plugin for visual profiles and
-three V1 module integrations: Kanban, Spaced Repetition, and Obsidian Bases. It
-does not edit third-party plugin files, Base definitions, review scheduling, or
-user data.
+Customization Studio is a non-invasive Obsidian plugin for personalizing the
+appearance of Kanban, Spaced Repetition, and Obsidian Bases. It keeps module
+logic separate, applies plugin-owned styles, and stores customization profiles
+through Obsidian's plugin data API. It does not edit target plugin sources,
+settings, review schedules, Base definitions, or user content.
 
-## V1 module scope
+**Author:** [Ahmedadel200066](https://github.com/Ahmedadel200066)
 
-Only these modules are registered:
+**Minimum Obsidian version:** 1.9.0 (required for Bases support)
 
-- **Kanban** — controls for column/card colors, background opacity, radii,
-  spacing, padding, blur, background image layers, hover appearance, per-column
-  color overrides, and visual drag states. Column names and card/drag selectors
-  are based on the Kanban 2.0.51 source stylesheet and component classes.
-- **Spaced Repetition** — flashcard surface, border, radius, shadow, padding,
-  shared question/answer typography, review area spacing, show-answer and review
-  button colors/states, and review status colors. Selectors are based on the
-  Spaced Repetition 1.15.4 source styles and button classes.
-- **Obsidian Bases** — table and cards-view settings written through the native
-  CSS variables listed in Obsidian's Bases CSS variable reference. Bases is
-  detected through `app.internalPlugins`, not the community plugin registry.
+## Screenshots
 
-Each module owns its settings schema, target detection metadata, selectors,
-controller, observer lifecycle, and generated CSS. Add future modules to
-`modules/` and `modules/index.js`; no other modules are part of V1.
+Screenshots are not available yet.
 
-## Profiles and settings
+<!-- Add verified screenshots here after capturing them in Obsidian. -->
 
-- Five built-in profiles: Minimal, Dark Academia, Glassmorphism, Colorful, and
-  Focus Mode. Duplicate a built-in profile to edit it.
-- Custom profiles support create, duplicate, rename, delete, import, and export.
-- Each profile stores global variables, independent module enablement, and
-  module-specific settings.
-- Setting changes preview immediately and persistence is debounced. Pending
-  changes are flushed during plugin unload.
-- Existing module CSS from older versions is migrated. CSS belonging to modules
-  outside V1 is preserved in `inactiveModuleCss` but is not injected.
-- Optional module CSS is scoped under the module root. `@import`, keyframes,
-  and other global at-rules are rejected.
+## Features
+
+- Five built-in appearance presets: Minimal, Dark Academia, Glassmorphism,
+  Colorful, and Focus Mode.
+- Custom profiles can be created, duplicated, renamed, deleted, imported,
+  exported, and switched.
+- Global accent, surface, and text colors; profile-level custom CSS.
+- Obsidian tab bar opacity and configurable color gradient.
+- Organized visual settings with color pickers, sliders, toggles, dropdowns,
+  collapsible groups, active-profile color previews, live preview, and automatic
+  persistence.
+- A ribbon shortcut opens the visual settings in a plugin-owned modal.
+- Independent module enablement and settings for each supported integration.
+- Optional module-scoped custom CSS.
+- Styles and observers are owned by the plugin and cleaned up when modules are
+  disabled or the plugin unloads.
+- Modular source architecture supports future integrations without adding
+  placeholder modules to the current release.
+
+## Supported integrations
+
+### Kanban
+
+Column/card colors and opacity, automatic and manual column coloring, spacing,
+padding, radii, column blur, board image and overlay options, independent card
+and column glow, and visual drag states. Local image paths are resolved through
+Obsidian's vault resource-path API; external images accept HTTP(S) URLs.
+Column override colors are keyed by visible title and assigned separate
+temporary DOM tokens, so distinct columns remain distinct during reordering
+while their DOM elements remain mounted. Overrides cannot distinguish columns
+with duplicate titles, and title-based overrides do not follow a renamed
+column.
+
+The inspected selectors correspond to Kanban 2.0.51. The installed target
+version and live drag interactions have not been tested in a vault. A
+right-click card color menu is not provided: the inspected Kanban component
+passes card IDs to its drag/drop components but does not expose a verified
+stable ID on rendered card DOM; adding DOM context handlers risks interfering
+with Kanban's native card menu.
+
+### Spaced Repetition
+
+Flashcard appearance, shared question/answer typography, review controls,
+answer/review button colors and states, spacing, and transitions. The inspected
+selectors correspond to Spaced Repetition 1.15.4. The inspected DOM uses shared
+content rather than distinct question/answer text containers; progress styling
+is not provided. Live study-session compatibility has not been tested.
+
+### Obsidian Bases
+
+Table and cards-view settings using documented native Bases CSS variables.
+Bases is detected as an Obsidian core plugin. Some requested visual details
+have no verified supported hook and are intentionally not exposed. Requires
+Obsidian 1.9.0 or later.
+
+Only these three integrations are registered in V1.
 
 ## Installation
 
-The Obsidian plugin directory must be named after the manifest ID:
+### Install from a GitHub release
 
-1. Build the distributable package:
+1. Download `Customization-Studio.zip` from a published GitHub release.
+2. Extract its contents directly into:
 
-   ```sh
-   npm ci
-   npm run build
+   ```text
+   <vault>/.obsidian/plugins/customization-studio/
    ```
 
-2. Copy the **contents of `dist/`** into
-   `<vault>/.obsidian/plugins/customization-studio/`.
-3. Verify the generated `main.js`, `manifest.json`, and `styles/` are directly
-   inside that folder, not nested one level deeper.
-4. Enable **Customization Studio** under Community plugins.
+3. Confirm `main.js`, `manifest.json`, and `styles/` are directly inside that
+   directory (not nested in another folder).
+4. In Obsidian, enable **Customization Studio** under Community plugins.
 
-Obsidian loads the conventional `main.js` entry point. The build bundles the
-modular source tree into `dist/main.js` and keeps `obsidian` external for host
-API access. Profiles are bundled into the output; the package step copies the
-manifest and styles alongside it. Do not install the unbundled source tree.
+The installable archive contains only runtime files and is generated by the
+release workflow. The repository also contains modular source and development
+files; do not use a source-code archive as the installable ZIP.
 
-For development, run `npm run dev` to watch source changes and refresh the
-package in `dist/`. Install `dist/` into a test vault to exercise the plugin.
-The source entry point is `src/main.js`; its modular imports remain in `core/`,
-`modules/`, and `profiles/`.
+### Install with BRAT
 
-The `styles/core.css` loader reads
-`<vault>/.obsidian/plugins/customization-studio/styles/core.css`. If that
-optional file is missing, the plugin shows a warning and continues loading.
-Obsidian 1.9.0 or later is required for Bases.
+BRAT can install a repository that publishes releases containing the plugin
+files. Install BRAT from Community plugins, then:
 
-Run the automated tests from this repository with:
+1. Open **Settings → BRAT → Add Beta plugin**.
+2. Enter `Ahmedadel200066/Obsidian-Customization-Suite`.
+3. Select the published Customization Studio release and enable it under
+   Community plugins.
+
+BRAT and release installation have not been tested in an Obsidian vault.
+
+### Manual installation from the repository
+
+The repository root is kept installable: it contains the generated `main.js`,
+`manifest.json`, and runtime `styles/`. Clone/copy the repository contents
+directly into `<vault>/.obsidian/plugins/customization-studio/`, then enable
+the plugin in Obsidian. Do not copy the repository into an additional nested
+folder.
+
+## Development
+
+Requirements: Node.js 20 or later and npm.
 
 ```sh
+npm ci
+npm run build
 npm test
 ```
 
-## Verification limits
+`npm run build` bundles `src/main.js` and local modules into the root-level
+`main.js`. The Obsidian `obsidian` API remains external. The build rejects
+unresolved local imports and validates the root manifest and core stylesheet.
 
-No Obsidian vault or installed target plugins were available in the development
-environment. Automated tests use DOM fixtures matching verified upstream class
-names; they do not prove that the visual result works in a live Obsidian window,
-survives an actual Obsidian restart, or preserves native drag/review behavior.
-Kanban and Spaced Repetition selectors were checked against the upstream source
-versions above, but not against a user's installed versions.
+To rebuild on source changes:
 
-Bases controls use the documented variables
-`--bases-table-*` and `--bases-cards-*`. The native CSS variable reference does
-not document card radius, cover sizing/position, property visibility, or a
-specific responsive grid selector; those controls have not been fabricated.
-Actual Bases rendering remains unverified until tested in Obsidian.
+```sh
+npm run dev
+```
 
-Likewise, the Spaced Repetition interface exposes the shared `.sr-content` area,
-not separate question/answer text containers or a verified progress-bar
-selector. Text styling therefore applies to the shared content, and progress
-styling is not provided.
+The workflow in `.github/workflows/release.yml` runs on published releases,
+installs locked dependencies, builds and tests the project, validates the
+bundle, creates a root-flat install ZIP, and attaches it to the release. The
+repository/source archive and installable ZIP are separate artifacts.
 
-## Architecture notes
+## Compatibility and known limitations
 
-- Target plugins are detected without mutating their settings. Bases detection
-  uses `app.internalPlugins.getPluginById("bases")?.enabled` when available.
-- Controllers observe only their matching view roots and disconnect when a
-  module is disabled, its target becomes unavailable, or the plugin unloads.
-- Every injected style element is created and removed by this plugin. Kanban's
-  temporary column marker is restored only if its value is still the value this
-  plugin wrote.
-- Kanban drag styles affect only the plugin's visual drag container and dropping
-  lane; no native drag handlers, transforms, or scheduling logic are wrapped.
-- Theme-sensitive global variables are set through a plugin-owned stylesheet
-  and restored by removing that stylesheet.
+- Minimum Obsidian version is 1.9.0 for the Bases integration.
+- Kanban and Spaced Repetition selectors were inspected against upstream
+  Kanban 2.0.51 and Spaced Repetition 1.15.4 source. This does not certify other
+  versions.
+- No live Obsidian vault or installed target plugins were available for
+  validation. Real theme compatibility, restart persistence, current plugin
+  DOM, and native drag/review behavior require manual testing.
+- Spaced Repetition's inspected markup does not expose separate question and
+  answer text containers or a verified progress bar selector.
+- The documented Bases variables do not provide verified hooks for card
+  radius, cover positioning, property visibility, or a specific responsive
+  grid selector; those controls are omitted.
+- A missing optional `styles/core.css` produces a warning but does not prevent
+  startup.
+- The tab bar appearance targets Obsidian's `.workspace-tab-header-container`
+  UI class. It has not been verified against a live Obsidian window or every
+  theme.
+- The ribbon shortcut opens the shared settings UI in a plugin-owned modal;
+  navigation directly to the Obsidian settings tab is not exposed through the
+  public Obsidian API.
+- Column blur uses a translucent lane surface (capped at 75% effective opacity
+  while blur is active) so the backdrop can be visible; the exact appearance
+  depends on what is behind the Kanban lane.
+- External background URLs are syntactically checked but remote availability
+  cannot be guaranteed or tested from the plugin settings.
+- Kanban visual drag-state CSS is based on the pinned source DOM. Native
+  pickup/drop behavior and visual continuity after the installed plugin
+  replaces elements require live testing.
+- Profile-wide custom CSS can affect any matching Obsidian element. Module CSS
+  is scoped to its module root and rejects global at-rules such as `@import`.
+- No `LICENSE` file is currently included. All rights remain with their
+  respective owners unless and until the project owner adds a license.
+
+## Bug reports
+
+Report bugs through the
+[GitHub Issues page](https://github.com/Ahmedadel200066/Obsidian-Customization-Suite/issues).
+Include your Obsidian version, target plugin and version, steps to reproduce,
+expected and actual behavior, and relevant console errors. Do not attach vault
+data, private notes, or credentials.
+
+## Contributing
+
+Before proposing changes:
+
+1. Check existing issues and describe the problem or feature.
+2. Keep integrations isolated under `modules/<module-id>/`.
+3. Verify selectors and APIs against documented or upstream sources; do not
+   invent hooks.
+4. Add or update tests, then run `npm ci`, `npm run build`, and `npm test`.
+5. Clearly state what was and was not verified inside Obsidian.
+
+Please do not commit secrets, user-vault content, or generated dependency
+directories. Changes to licensing terms require confirmation from the project
+owner.
+
+## Manual Obsidian test checklist
+
+These checks remain necessary before claiming runtime compatibility:
+
+1. Install the root plugin files or release ZIP into
+   `.obsidian/plugins/customization-studio/`, enable the plugin, and confirm the
+   ribbon shortcut opens the settings tab.
+2. Switch profiles, change global and module controls, restart Obsidian, and
+   confirm settings and active profile persist.
+3. Reset global appearance and confirm tab-bar opacity/gradient controls and
+   live preview return to their Minimal values.
+4. On a Kanban 2.0.51 board, use two uniquely named columns with different
+   manual colors; reorder columns and create a new lane.
+5. Test a local vault image and a reachable HTTPS image as board backgrounds;
+   verify a missing local path reports an error without altering board data.
+6. With lane opacity below 100%, change column blur and test glow/drag styles
+   during native card pickup, movement, and drop. Repeat with
+   `prefers-reduced-motion` enabled.
+7. Test Spaced Repetition controls in a real review and Bases controls in both
+   table and cards views, including module disable and plugin unload cleanup.
+
+## Author
+
+[Ahmedadel200066 on GitHub](https://github.com/Ahmedadel200066)
+
+No Buy Me a Coffee destination has been added because the project owner has not
+provided an official URL.
 
 ## Upstream references
 
-- [Kanban source](https://github.com/community-archive/obsidian-kanban), manifest
-  ID `obsidian-kanban`, version 2.0.51.
-- [Spaced Repetition source](https://github.com/st3v3nmw/obsidian-spaced-repetition),
-  manifest ID `obsidian-spaced-repetition`, version 1.15.4.
-- [Bases CSS variables](https://github.com/obsidianmd/obsidian-developer-docs/blob/1c26772ac13d6e9870c865936d389fdfe694e742/en/Reference/CSS%20variables/Editor/Bases.md).
+- [Kanban](https://github.com/community-archive/obsidian-kanban), inspected
+  version 2.0.51.
+- [Spaced Repetition](https://github.com/st3v3nmw/obsidian-spaced-repetition),
+  inspected version 1.15.4.
+- [Obsidian Bases CSS variables](https://github.com/obsidianmd/obsidian-developer-docs/blob/1c26772ac13d6e9870c865936d389fdfe694e742/en/Reference/CSS%20variables/Editor/Bases.md).

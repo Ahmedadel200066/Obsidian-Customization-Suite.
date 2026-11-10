@@ -1,9 +1,13 @@
 const VARIABLE_MAP = {
   accentColor: ["--cs-accent-color", "--interactive-accent"],
   surfaceColor: ["--cs-surface-color", "--background-primary"],
-  textColor: ["--cs-text-color", "--text-normal"],
-  borderRadius: ["--cs-border-radius", "--radius-m"]
+  textColor: ["--cs-text-color", "--text-normal"]
 };
+
+function colorWithOpacity(hex, opacity) {
+  const channels = [1, 3, 5].map((offset) => Number.parseInt(hex.slice(offset, offset + 2), 16));
+  return `rgba(${channels.join(", ")}, ${opacity})`;
+}
 
 class ThemeEngine {
   constructor(plugin) {
@@ -60,7 +64,12 @@ class ThemeEngine {
     }
     this.setStyle(
       "variables",
-      `body.customization-studio-enabled[data-customization-studio-profile="${profile.id}"] {\n  ${declarations.join("\n  ")}\n}`
+      `body.customization-studio-enabled[data-customization-studio-profile="${profile.id}"] {\n  ${declarations.join("\n  ")}\n}\n` +
+      `body.customization-studio-enabled[data-customization-studio-profile="${profile.id}"] .workspace-tab-header-container {\n` +
+      `  background-color: ${colorWithOpacity(profile.variables.surfaceColor, profile.variables.tabBarOpacity / 100)};\n` +
+      `  background-image: linear-gradient(${profile.variables.tabBarGradientDirection}, ` +
+      `${colorWithOpacity(profile.variables.tabBarGradientColor, profile.variables.tabBarGradientIntensity / 100)}, transparent);\n` +
+      `}`
     );
     this.setStyle("profile", profile.customCss || "");
   }

@@ -8,10 +8,15 @@ class CustomizationSettingTab extends PluginSettingTab {
     this.importText = "";
     this.newProfileName = "";
     this.renameValue = "";
+    this.profilePreview = null;
   }
 
   display() {
-    const { containerEl } = this;
+    this.displayInto(this.containerEl);
+  }
+
+  displayInto(containerEl) {
+    this.renderTarget = containerEl;
     containerEl.empty();
     containerEl.addClass("customization-studio-settings");
     containerEl.createEl("h2", { text: "Customization Studio" });
@@ -24,14 +29,53 @@ class CustomizationSettingTab extends PluginSettingTab {
     this.displayModules(containerEl);
   }
 
+  releaseDisplayTarget(containerEl) {
+    if (this.renderTarget === containerEl) this.renderTarget = null;
+  }
+
+  refreshDisplay() {
+    this.displayInto(this.renderTarget || this.containerEl);
+  }
+
   displayProfileSettings(containerEl) {
     const active = this.plugin.profileManager.getActiveProfile();
     const isCustom = this.plugin.profileManager.customProfiles.some((profile) => profile.id === active.id);
     const section = containerEl.createEl("details", { cls: "cs-section", attr: { open: true } });
     section.createEl("summary", { text: "Profiles" });
+    const preview = section.createEl("div", {
+      cls: "cs-profile-preview",
+      attr: { "aria-label": `Active profile: ${active.name}` }
+    });
+    preview.createEl("h3", { text: active.name });
+    preview.createEl("p", { text: active.description || "No profile description." });
+    const swatches = preview.createEl("div", {
+      cls: "cs-profile-swatches",
+      attr: { "aria-label": "Profile color preview" }
+    });
+    for (const [label, value] of [
+      ["Accent", active.variables.accentColor],
+      ["Surface", active.variables.surfaceColor],
+      ["Text", active.variables.textColor],
+      ["Tab gradient", active.variables.tabBarGradientColor]
+    ]) {
+      const swatch = swatches.createEl("span", { cls: "cs-profile-swatch" });
+      swatch.setAttribute("title", `${label}: ${value}`);
+      swatch.setAttribute("aria-label", `${label}: ${value}`);
+      swatch.style.backgroundColor = value;
+      swatch.dataset.profileColor = label;
+    }
+    const enabledModules = MODULES
+      .filter((module) => active.moduleEnabled[module.id] !== false)
+      .map((module) => module.name);
+    const moduleSummary = preview.createEl("p", {
+      cls: "cs-profile-modules",
+      text: enabledModules.length ? `Enabled modules: ${enabledModules.join(", ")}` : "No modules enabled."
+    });
+    this.profilePreview = { swatches: [...swatches.children], moduleSummary };
 
     new Setting(section)
       .setName("Active profile")
+      .setDesc(`Currently active: ${active.name}. Switching applies the profile immediately.`)
       .addDropdown((dropdown) => {
         for (const profile of this.plugin.profileManager.getProfiles()) {
           dropdown.addOption(profile.id, profile.name);
@@ -39,7 +83,8 @@ class CustomizationSettingTab extends PluginSettingTab {
         dropdown.setValue(active.id).onChange((id) => this.runChange(async () => {
           this.plugin.profileManager.setActiveProfile(id);
           await this.persistChange();
-          this.display();
+          this.refreshDisplay();
+          new Notice(`Customization Studio: applied "${this.plugin.profileManager.getActiveProfile().name}".`);
         }));
       });
 
@@ -57,7 +102,7 @@ class CustomizationSettingTab extends PluginSettingTab {
           this.plugin.profileManager.createCustomProfile(this.newProfileName);
           this.newProfileName = "";
           await this.persistChange();
-          this.display();
+          this.refreshDisplay();
         })));
 
     if (isCustom) {
@@ -69,7 +114,7 @@ class CustomizationSettingTab extends PluginSettingTab {
           .onClick(() => this.runChange(async () => {
             this.plugin.profileManager.duplicateProfile(active.id);
             await this.persistChange();
-            this.display();
+            this.refreshDisplay();
           })));
 
       new Setting(section)
@@ -84,7 +129,7 @@ class CustomizationSettingTab extends PluginSettingTab {
             this.plugin.profileManager.renameCustomProfile(active.id, this.renameValue);
             this.renameValue = "";
             await this.persistChange();
-            this.display();
+            this.refreshDisplay();
           })));
     } else {
       new Setting(section)
@@ -96,7 +141,7 @@ class CustomizationSettingTab extends PluginSettingTab {
           .onClick(() => this.runChange(async () => {
             this.plugin.profileManager.createCustomProfile(`${active.name} custom`);
             await this.persistChange();
-            this.display();
+            this.refreshDisplay();
           })));
     }
 
@@ -130,7 +175,7 @@ class CustomizationSettingTab extends PluginSettingTab {
           const imported = this.plugin.profileManager.importProfile(this.importText);
           this.importText = "";
           await this.persistChange();
-          this.display();
+          this.refreshDisplay();
           new Notice(`Customization Studio: imported "${imported.name}".`);
         })));
 
@@ -144,7 +189,7 @@ class CustomizationSettingTab extends PluginSettingTab {
           .onClick(() => this.runChange(async () => {
             this.plugin.profileManager.deleteCustomProfile(active.id);
             await this.persistChange();
-            this.display();
+            this.refreshDisplay();
           })));
     }
   }
@@ -165,22 +210,49 @@ class CustomizationSettingTab extends PluginSettingTab {
     this.addColorControl(section, "Text color", profile.variables.textColor || "#dddddd",
       (value) => this.updateProfile({ variables: { textColor: value } }));
     new Setting(section)
-      .setName("Interface corner radius")
+      .setName("Tab bar opacity")
+      .setDesc("Transparency for the Obsidian tab bar only.")
       .addSlider((slider) => slider
-        .setLimits(0, 32, 1)
-        .setValue(Number.parseInt(profile.variables.borderRadius || "8px", 10))
+        .setLimits(0, 100, 1)
+        .setValue(profile.variables.tabBarOpacity)
         .setDynamicTooltip()
         .onChange((value) => this.updateProfile({
-          variables: { borderRadius: `${value}px` }
+          variables: { tabBarOpacity: value }
+        })));
+    this.addColorControl(section, "Tab bar gradient color", profile.variables.tabBarGradientColor,
+      (value) => this.updateProfile({ variables: { tabBarGradientColor: value } }));
+    new Setting(section)
+      .setName("Tab bar gradient direction")
+      .setDesc("Choose the direction of the tab bar's color gradient.")
+      .addDropdown((dropdown) => {
+        for (const direction of [
+          "to right", "to left", "to bottom", "to top",
+          "to bottom right", "to bottom left", "to top right", "to top left"
+        ]) {
+          dropdown.addOption(direction, direction);
+        }
+        dropdown.setValue(profile.variables.tabBarGradientDirection)
+          .onChange((value) => this.updateProfile({ variables: { tabBarGradientDirection: value } }));
+      });
+    new Setting(section)
+      .setName("Tab bar gradient intensity")
+      .setDesc("Set the gradient opacity. Zero disables the gradient.")
+      .addSlider((slider) => slider
+        .setLimits(0, 100, 1)
+        .setValue(profile.variables.tabBarGradientIntensity)
+        .setDynamicTooltip()
+        .onChange((value) => this.updateProfile({
+          variables: { tabBarGradientIntensity: value }
         })));
     new Setting(section)
       .setName("Reset global appearance")
+      .setDesc("Restores global colors and tab bar appearance to Minimal defaults.")
       .addButton((button) => button
         .setButtonText("Reset")
         .onClick(() => this.updateProfile({
           variables: this.plugin.profileManager.builtInProfiles[0].variables,
           replaceVariables: true
-        })));
+        }, true)));
 
     const advanced = section.createEl("details", { cls: "cs-subsection" });
     advanced.createEl("summary", { text: "Advanced global CSS" });
@@ -228,6 +300,7 @@ class CustomizationSettingTab extends PluginSettingTab {
         .onChange((value) => this.runChange(async () => {
           this.plugin.profileManager.setModuleEnabled(module.id, value);
           await this.persistChange();
+          this.refreshProfilePreview();
         })));
 
     for (const group of module.controlGroups) {
@@ -267,7 +340,7 @@ class CustomizationSettingTab extends PluginSettingTab {
             modules: { [module.id]: module.defaultSettings }
           });
           await this.persistChange();
-          this.display();
+          this.refreshDisplay();
         })));
   }
 
@@ -275,7 +348,8 @@ class CustomizationSettingTab extends PluginSettingTab {
     const value = profile.modules[module.id][control.key];
     const schema = module.settingsSchema[control.key];
     const setting = new Setting(containerEl).setName(control.name);
-    if (control.unit) setting.setDesc(`Current value: ${value}${control.unit}`);
+    if (control.desc) setting.setDesc(control.desc);
+    else if (control.unit) setting.setDesc(`Current value: ${value}${control.unit}`);
     const update = (next) => this.updateModule(module.id, { [control.key]: next });
     if (control.type === "color") {
       setting.addColorPicker((picker) => picker.setValue(value).onChange(update));
@@ -294,8 +368,8 @@ class CustomizationSettingTab extends PluginSettingTab {
       });
     } else if (control.type === "text") {
       setting.addText((text) => {
-        text.setPlaceholder("https://example.com/image.jpg").setValue(value);
-        text.inputEl.type = "url";
+        text.setPlaceholder("Assets/cover.jpg or https://example.com/cover.jpg").setValue(value);
+        text.inputEl.type = "text";
         text.inputEl.addEventListener("blur", () => update(text.getValue().trim()));
       });
     }
@@ -337,10 +411,12 @@ class CustomizationSettingTab extends PluginSettingTab {
     return this.plugin.profileManager.customProfiles.some((item) => item.id === profile.id);
   }
 
-  updateProfile(update) {
+  updateProfile(update, refreshAfter = false) {
     return this.runChange(async () => {
       this.plugin.profileManager.updateActiveProfile(update);
       await this.persistChange();
+      if (refreshAfter) this.refreshDisplay();
+      else this.refreshProfilePreview();
     });
   }
 
@@ -348,7 +424,32 @@ class CustomizationSettingTab extends PluginSettingTab {
     return this.runChange(async () => {
       this.plugin.profileManager.updateModuleSettings(moduleId, update);
       await this.persistChange();
+      this.refreshProfilePreview();
     });
+  }
+
+  refreshProfilePreview() {
+    if (!this.profilePreview) return;
+    const profile = this.plugin.profileManager.getActiveProfile();
+    const values = {
+      Accent: profile.variables.accentColor,
+      Surface: profile.variables.surfaceColor,
+      Text: profile.variables.textColor,
+      "Tab gradient": profile.variables.tabBarGradientColor
+    };
+    for (const swatch of this.profilePreview.swatches) {
+      const label = swatch.dataset.profileColor;
+      const value = values[label];
+      swatch.style.backgroundColor = value;
+      swatch.setAttribute("title", `${label}: ${value}`);
+      swatch.setAttribute("aria-label", `${label}: ${value}`);
+    }
+    const enabledModules = MODULES
+      .filter((module) => profile.moduleEnabled[module.id] !== false)
+      .map((module) => module.name);
+    this.profilePreview.moduleSummary.textContent = enabledModules.length
+      ? `Enabled modules: ${enabledModules.join(", ")}`
+      : "No modules enabled.";
   }
 
   async persistChange() {

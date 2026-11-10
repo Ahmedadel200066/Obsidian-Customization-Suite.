@@ -27,6 +27,7 @@ const SCHEMA = {
   cardsLineHeight: { type: "range", default: 24, min: 12, max: 48 },
   cardsBorderWidth: { type: "range", default: 1, min: 0, max: 8 },
   cardsShadow: { type: "range", default: 20, min: 0, max: 100 },
+  diagnostics: { type: "boolean", default: false },
   customCss: { type: "text", default: "", maxLength: 10000 }
 };
 
@@ -66,6 +67,15 @@ const CONTROL_GROUPS = [
       { key: "cardsBorderWidth", name: "Card border width", type: "range", unit: "px" },
       { key: "cardsShadow", name: "Card shadow", type: "range", unit: "%" }
     ]
+  },
+  {
+    name: "Diagnostics",
+    controls: [{
+      key: "diagnostics",
+      name: "Enable development diagnostics",
+      type: "boolean",
+      desc: "Log Bases detection, view counts, and applied CSS variable names only."
+    }]
   }
 ];
 

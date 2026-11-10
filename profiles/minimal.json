@@ -3,8 +3,7 @@
   "name": "Minimal",
   "description": "A restrained accent and compact visual treatment.",
   "variables": {
-    "accentColor": "#7c6ce7",
-    "borderRadius": "4px"
+    "accentColor": "#7c6ce7"
   },
   "customCss": "",
   "moduleCss": {}

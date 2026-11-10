@@ -10,7 +10,19 @@ const BUILT_IN_PROFILES = [
 
 const PROFILE_ID_PATTERN = /^[a-z0-9][a-z0-9-]{0,63}$/;
 const COLOR_PATTERN = /^#[0-9a-fA-F]{6}$/;
-const RADIUS_PATTERN = /^(0|[1-9]\d{0,2})px$/;
+const PROFILE_VARIABLE_DEFAULTS = {
+  accentColor: "#7c6ce7",
+  surfaceColor: "#202020",
+  textColor: "#dddddd",
+  tabBarOpacity: 100,
+  tabBarGradientColor: "#7c6ce7",
+  tabBarGradientDirection: "to right",
+  tabBarGradientIntensity: 0
+};
+const TAB_BAR_GRADIENT_DIRECTIONS = new Set([
+  "to right", "to left", "to bottom", "to top",
+  "to bottom right", "to bottom left", "to top right", "to top left"
+]);
 
 function validateProfile(profile, knownModules, legacyModuleEnabled = {}) {
   if (!profile || typeof profile !== "object" || Array.isArray(profile)) {
@@ -38,18 +50,30 @@ function validateProfile(profile, knownModules, legacyModuleEnabled = {}) {
     throw new Error(`Profile "${profile.id}" variables must be an object.`);
   }
 
-  const variables = {};
+  const variables = { ...PROFILE_VARIABLE_DEFAULTS };
   for (const [key, value] of Object.entries(profile.variables)) {
     if (key === "accentColor" || key === "surfaceColor" || key === "textColor") {
       if (typeof value !== "string" || !COLOR_PATTERN.test(value)) {
         throw new Error(`Profile "${profile.id}" has an invalid ${key}.`);
       }
       variables[key] = value;
-    } else if (key === "borderRadius") {
-      if (typeof value !== "string" || !RADIUS_PATTERN.test(value)) {
-        throw new Error(`Profile "${profile.id}" has an invalid borderRadius.`);
+    } else if (key === "tabBarGradientColor") {
+      if (typeof value !== "string" || !COLOR_PATTERN.test(value)) {
+        throw new Error(`Profile "${profile.id}" has an invalid ${key}.`);
       }
       variables[key] = value;
+    } else if (key === "tabBarOpacity" || key === "tabBarGradientIntensity") {
+      if (typeof value !== "number" || !Number.isInteger(value) || value < 0 || value > 100) {
+        throw new Error(`Profile "${profile.id}" ${key} must be an integer from 0 to 100.`);
+      }
+      variables[key] = value;
+    } else if (key === "tabBarGradientDirection") {
+      if (!TAB_BAR_GRADIENT_DIRECTIONS.has(value)) {
+        throw new Error(`Profile "${profile.id}" has an unsupported ${key}.`);
+      }
+      variables[key] = value;
+    } else if (key === "borderRadius") {
+      continue;
     } else {
       throw new Error(`Profile "${profile.id}" contains unsupported variable "${key}".`);
     }
@@ -294,4 +318,4 @@ class ProfileManager {
   }
 }
 
-module.exports = { ProfileManager, validateProfile };
+module.exports = { ProfileManager, validateProfile, PROFILE_VARIABLE_DEFAULTS };

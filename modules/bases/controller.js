@@ -1,5 +1,4 @@
 const { BaseModuleController } = require("../base-controller");
-const { rgba } = require("../settings-utils");
 
 function styles(settings) {
   const shadowAlpha = settings.cardsShadow / 100;
@@ -34,10 +33,25 @@ function styles(settings) {
   --bases-cards-border-width: ${settings.cardsBorderWidth}px;
   --bases-cards-shadow: ${cardShadow};
   --bases-cards-shadow-hover: ${hoverShadow};
-  --cs-bases-module-shadow-color: ${rgba("#000000", shadowAlpha)};
 }`;
 }
 
-class BasesController extends BaseModuleController {}
+class BasesController extends BaseModuleController {
+  refresh(profile) {
+    super.refresh(profile);
+    if (!this.settings.diagnostics) return;
+    const detected = this.manager.isTargetPluginEnabled(this.module);
+    const appliedVariables = this.style?.textContent
+      ? [...this.style.textContent.matchAll(/(--bases-[a-z-]+)\s*:/g)].map((match) => match[1])
+      : [];
+    console.info("[Customization Studio] Bases diagnostics", {
+      detected,
+      enabled: profile.moduleEnabled[this.module.id] !== false,
+      matchedViews: this.roots.size,
+      stylesInjected: Boolean(this.style?.parentNode),
+      appliedVariables: [...new Set(appliedVariables)]
+    });
+  }
+}
 
 module.exports = { BasesController, styles };

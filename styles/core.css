@@ -4,6 +4,11 @@
   padding: 0 0 2rem;
 }
 
+.customization-studio-modal {
+  max-height: 80vh;
+  overflow-y: auto;
+}
+
 .customization-studio-settings .cs-section,
 .customization-studio-settings .cs-module-section,
 .customization-studio-settings .cs-subsection {
@@ -45,11 +50,78 @@
   min-width: min(45vw, 520px);
 }
 
+.customization-studio-settings .cs-profile-preview {
+  border: 1px solid var(--background-modifier-border, rgba(127, 127, 127, 0.25));
+  border-radius: var(--radius-m, 10px);
+  margin: 0.75rem 0 1rem;
+  padding: 1rem;
+  background: var(--background-secondary);
+}
+
+.customization-studio-settings .cs-profile-preview h3,
+.customization-studio-settings .cs-profile-preview p {
+  margin: 0;
+}
+
+.customization-studio-settings .cs-profile-preview h3 {
+  color: var(--text-accent);
+  font-size: 1.1em;
+}
+
+.customization-studio-settings .cs-profile-preview p {
+  margin-top: 0.4rem;
+  color: var(--text-muted);
+}
+
+.customization-studio-settings .cs-profile-swatches {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.8rem;
+}
+
+.customization-studio-settings .cs-profile-swatch {
+  width: 1.5rem;
+  height: 1.5rem;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 50%;
+}
+
+.customization-studio-settings .cs-profile-modules {
+  font-size: var(--font-smaller);
+}
+
 .customization-studio-settings .setting-item-control .slider {
   min-width: 140px;
+}
+
+.customization-studio-settings details > summary:focus-visible,
+.customization-studio-settings button:focus-visible,
+.customization-studio-settings input:focus-visible,
+.customization-studio-settings select:focus-visible,
+.customization-studio-settings textarea:focus-visible {
+  outline: 2px solid var(--interactive-accent);
+  outline-offset: 2px;
 }
 
 .customization-studio-settings h2,
 .customization-studio-settings h3 {
   margin-top: 0.5rem;
+}
+
+@media (max-width: 700px) {
+  .customization-studio-settings {
+    padding-inline: 0.25rem;
+  }
+
+  .customization-studio-settings .setting-item {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .customization-studio-settings .setting-item-control,
+  .customization-studio-settings .cs-code-input {
+    width: 100%;
+    min-width: 0;
+  }
 }

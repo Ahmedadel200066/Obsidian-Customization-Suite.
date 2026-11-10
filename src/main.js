@@ -4,6 +4,7 @@ const { ProfileManager } = require("../core/profile-manager");
 const { ThemeEngine } = require("../core/theme-engine");
 const { ModuleManager } = require("../core/module-manager");
 const { CustomizationSettingTab } = require("../core/settings-tab");
+const { CustomizationStudioModal } = require("../core/settings-modal");
 
 module.exports = class CustomizationStudioPlugin extends Plugin {
   notifyUser(message) {
@@ -23,7 +24,10 @@ module.exports = class CustomizationStudioPlugin extends Plugin {
 
       this.moduleManager = new ModuleManager(this);
       this.moduleManager.load();
-      this.addSettingTab(new CustomizationSettingTab(this.app, this));
+      this.settingsTab = new CustomizationSettingTab(this.app, this);
+      this.addSettingTab(this.settingsTab);
+      this.settingsModal = new CustomizationStudioModal(this.app, this.settingsTab);
+      this.registerCustomizationEntryPoints();
       this.applyCustomization();
       this.app.workspace.onLayoutReady(() => this.moduleManager.refreshWithNotice());
     } catch (error) {
@@ -43,6 +47,20 @@ module.exports = class CustomizationStudioPlugin extends Plugin {
   async saveCustomization() {
     this.applyCustomization();
     return this.settingsManager.scheduleSave();
+  }
+
+  openCustomizationSettings() {
+    this.settingsModal.open();
+  }
+
+  registerCustomizationEntryPoints() {
+    this.register(() => this.settingsModal.close());
+    const ribbonIcon = this.addRibbonIcon(
+      "paintbrush",
+      "Open Customization Studio settings",
+      () => this.openCustomizationSettings()
+    );
+    this.register(() => ribbonIcon.remove());
   }
 
   cleanup() {

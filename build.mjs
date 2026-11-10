@@ -1,15 +1,14 @@
-import { cp, mkdir, readFile, rm } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import esbuild from "esbuild";
 
 const root = path.dirname(fileURLToPath(import.meta.url));
-const intermediateDir = path.join(root, ".build");
-const distributionDir = path.join(root, "dist");
+const outputFile = path.join(root, "main.js");
 const watching = process.argv.includes("--watch");
 
-async function packagePlugin() {
-  const bundle = await readFile(path.join(intermediateDir, "main.js"), "utf8");
+async function validatePluginBundle() {
+  const bundle = await readFile(outputFile, "utf8");
   const imports = [...bundle.matchAll(/\brequire\((['"])([^'"]+)\1\)/g)]
     .map((match) => match[2]);
   const unresolvedLocalImports = imports.filter((specifier) =>
@@ -24,18 +23,14 @@ async function packagePlugin() {
       `Expected only the Obsidian host API to remain external; found ${imports.join(", ") || "no imports"}.`
     );
   }
-
-  await rm(distributionDir, { recursive: true, force: true });
-  await mkdir(distributionDir, { recursive: true });
-  await cp(path.join(intermediateDir, "main.js"), path.join(distributionDir, "main.js"));
-  await cp(path.join(root, "manifest.json"), path.join(distributionDir, "manifest.json"));
-  await cp(path.join(root, "styles"), path.join(distributionDir, "styles"), { recursive: true });
+  JSON.parse(await readFile(path.join(root, "manifest.json"), "utf8"));
+  await readFile(path.join(root, "styles/core.css"), "utf8");
 }
 
 const buildContext = await esbuild.context({
   absWorkingDir: root,
   entryPoints: ["src/main.js"],
-  outfile: ".build/main.js",
+  outfile: "main.js",
   bundle: true,
   platform: "browser",
   format: "cjs",
@@ -47,11 +42,11 @@ const buildContext = await esbuild.context({
       build.onEnd(async (result) => {
         if (result.errors.length) return;
         try {
-          await packagePlugin();
-          console.log(`Packaged Obsidian plugin at ${path.relative(root, distributionDir)}/`);
+          await validatePluginBundle();
+          console.log(`Built installable plugin bundle at ${path.relative(root, outputFile)}.`);
         } catch (error) {
           return {
-            errors: [{ text: `Could not package Obsidian plugin: ${error.message}` }]
+            errors: [{ text: `Plugin bundle validation failed: ${error.message}` }]
           };
         }
       });
@@ -61,7 +56,7 @@ const buildContext = await esbuild.context({
 
 if (watching) {
   await buildContext.watch();
-  console.log("Watching plugin sources; packaged output will be refreshed in dist/.");
+  console.log("Watching plugin sources; root main.js will be rebuilt on changes.");
 } else {
   try {
     const result = await buildContext.rebuild();

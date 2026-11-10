@@ -7,7 +7,7 @@ module.exports = {
   id: "spaced-repetition",
   name: "Spaced Repetition",
   target: { type: "community", ids: ["obsidian-spaced-repetition"] },
-  rootSelector: `${selectors.root}, .sr-deck-container`,
+  rootSelector: selectors.root,
   selectors,
   defaultSettings: settings.DEFAULT_SETTINGS,
   settingsSchema: settings.SCHEMA,

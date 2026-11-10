@@ -1,0 +1,82 @@
+name: Build and publish plugin release
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-upload:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out release source
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Build root plugin bundle
+        run: npm run build
+
+      - name: Run tests
+        run: npm test
+
+      - name: Validate bundle and create installable ZIP
+        run: |
+          node --input-type=module <<'NODE'
+          import { readFile, stat } from "node:fs/promises";
+
+          for (const file of ["main.js", "manifest.json", "styles/core.css"]) {
+            if ((await stat(file)).size === 0) throw new Error(`${file} is empty`);
+          }
+
+          const bundle = await readFile("main.js", "utf8");
+          const imports = [...bundle.matchAll(/\brequire\((['"])([^'"]+)\1\)/g)]
+            .map((match) => match[2]);
+          const localImports = imports.filter((name) =>
+            name.startsWith("./") || name.startsWith("../")
+          );
+          if (localImports.length) {
+            throw new Error(`Unresolved local imports: ${localImports.join(", ")}`);
+          }
+          if (!imports.includes("obsidian") || imports.some((name) => name !== "obsidian")) {
+            throw new Error(`Unexpected external imports: ${imports.join(", ")}`);
+          }
+
+          const manifest = JSON.parse(await readFile("manifest.json", "utf8"));
+          if (manifest.id !== "customization-studio") {
+            throw new Error(`Unexpected plugin ID: ${manifest.id}`);
+          }
+          NODE
+
+          zip -q -r "$RUNNER_TEMP/Customization-Studio.zip" \
+            main.js manifest.json styles
+
+          python3 - "$RUNNER_TEMP/Customization-Studio.zip" <<'PY'
+          import sys
+          from zipfile import ZipFile
+
+          with ZipFile(sys.argv[1]) as archive:
+              names = set(archive.namelist())
+          required = {"main.js", "manifest.json", "styles/core.css"}
+          if not required <= names:
+              raise SystemExit(f"ZIP missing files: {sorted(required - names)}")
+          if any(name.startswith(("src/", "core/", "modules/", "tests/", "node_modules/")) for name in names):
+              raise SystemExit("Installable ZIP unexpectedly includes source or development files")
+          if any(name.startswith(("dist/", "Customization-Studio/")) for name in names):
+              raise SystemExit("ZIP contains an extra nesting directory")
+          print("Installable ZIP verified: plugin files are at archive root.")
+          PY
+
+      - name: Attach installable ZIP to GitHub release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload "$GITHUB_REF_NAME" "$RUNNER_TEMP/Customization-Studio.zip" --clobber
