@@ -8,8 +8,9 @@ class CustomizationStudioModal extends Modal {
 
   onOpen() {
     this.setTitle("Customization Studio");
+    this.modalEl.addClass("customization-studio-modal");
     this.contentEl.addClass("customization-studio-modal");
-    this.settingsTab.displayInto(this.contentEl);
+    this.settingsTab.displayInto(this.contentEl, "ribbonModal");
   }
 
   onClose() {

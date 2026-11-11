@@ -23,5 +23,9 @@
   transitions.
 - Add safe, opt-in Spaced Repetition and Bases diagnostics that log counts and
   styling metadata only.
+- Add accessible tabbed settings navigation, per-surface persisted view state,
+  active-profile status, and safe invalid-profile recovery.
+- Add tab-bar transparency, backdrop blur, and linear/radial/circular gradient
+  controls.
 - Add a project report documenting implemented scope, limitations, and
   verification status.

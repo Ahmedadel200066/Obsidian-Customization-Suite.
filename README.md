@@ -23,7 +23,14 @@ Screenshots are not available yet.
 - Custom profiles can be created, duplicated, renamed, deleted, imported,
   exported, and switched.
 - Global accent, surface, and text colors; profile-level custom CSS.
-- Obsidian tab bar opacity and configurable color gradient.
+- Tab-header-only background transparency, backdrop blur, and configurable
+  linear, elliptical radial, or circular radial gradients.
+- Accessible tabbed navigation for Global Appearance, Profiles, and
+  Integrations, with a separate integration tab for each supported module.
+- Navigation section, selected integration, and scroll position persist
+  independently for the Community Plugins settings tab and ribbon modal.
+- The active profile name and status are visible across sections and settings
+  surfaces; profile switching updates all open views immediately.
 - Organized visual settings with color pickers, sliders, toggles, dropdowns,
   collapsible groups, active-profile color previews, live preview, and automatic
   persistence.
@@ -154,11 +161,19 @@ repository/source archive and installable ZIP are separate artifacts.
 - A missing optional `styles/core.css` produces a warning but does not prevent
   startup.
 - The tab bar appearance targets Obsidian's `.workspace-tab-header-container`
-  UI class. It has not been verified against a live Obsidian window or every
-  theme.
+  UI class. Zero opacity sets a transparent background without applying
+  opacity to tab labels or icons. Backdrop blur is ignored by browsers that do
+  not support `backdrop-filter`. Neither behavior has been verified against a
+  live Obsidian window or every theme.
 - The ribbon shortcut opens the shared settings UI in a plugin-owned modal;
   navigation directly to the Obsidian settings tab is not exposed through the
   public Obsidian API.
+- Profile recommendations are not implemented: the inspected source contains
+  no recommendation rules or theme detection, so the UI states that
+  suggestions are unavailable rather than inferring a profile.
+- No Buy Me a Coffee URL has been supplied by the owner; no donation link is
+  included. No integration context-menu action is registered because no
+  stable, verified menu hook for the supported plugin views was found.
 - Column blur uses a translucent lane surface (capped at 75% effective opacity
   while blur is active) so the backdrop can be visible; the exact appearance
   depends on what is behind the Kanban lane.

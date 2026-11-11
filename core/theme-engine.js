@@ -9,6 +9,21 @@ function colorWithOpacity(hex, opacity) {
   return `rgba(${channels.join(", ")}, ${opacity})`;
 }
 
+function tabBarGradient(variables) {
+  if (variables.tabBarGradientIntensity === 0) return "none";
+  const color = colorWithOpacity(
+    variables.tabBarGradientColor,
+    variables.tabBarGradientIntensity / 100
+  );
+  if (variables.tabBarGradientType === "radial") {
+    return `radial-gradient(ellipse at ${variables.tabBarGradientPosition}, ${color}, transparent)`;
+  }
+  if (variables.tabBarGradientType === "circle") {
+    return `radial-gradient(circle at ${variables.tabBarGradientPosition}, ${color}, transparent)`;
+  }
+  return `linear-gradient(${variables.tabBarGradientDirection}, ${color}, transparent)`;
+}
+
 class ThemeEngine {
   constructor(plugin) {
     this.plugin = plugin;
@@ -66,9 +81,12 @@ class ThemeEngine {
       "variables",
       `body.customization-studio-enabled[data-customization-studio-profile="${profile.id}"] {\n  ${declarations.join("\n  ")}\n}\n` +
       `body.customization-studio-enabled[data-customization-studio-profile="${profile.id}"] .workspace-tab-header-container {\n` +
-      `  background-color: ${colorWithOpacity(profile.variables.surfaceColor, profile.variables.tabBarOpacity / 100)};\n` +
-      `  background-image: linear-gradient(${profile.variables.tabBarGradientDirection}, ` +
-      `${colorWithOpacity(profile.variables.tabBarGradientColor, profile.variables.tabBarGradientIntensity / 100)}, transparent);\n` +
+      `  background-color: ${profile.variables.tabBarOpacity === 0
+        ? "transparent"
+        : colorWithOpacity(profile.variables.surfaceColor, profile.variables.tabBarOpacity / 100)};\n` +
+      `  background-image: ${tabBarGradient(profile.variables)};\n` +
+      `  backdrop-filter: blur(${profile.variables.tabBarBlur}px);\n` +
+      `  -webkit-backdrop-filter: blur(${profile.variables.tabBarBlur}px);\n` +
       `}`
     );
     this.setStyle("profile", profile.customCss || "");
@@ -92,4 +110,4 @@ class ThemeEngine {
   }
 }
 
-module.exports = { ThemeEngine, VARIABLE_MAP };
+module.exports = { ThemeEngine, VARIABLE_MAP, colorWithOpacity, tabBarGradient };

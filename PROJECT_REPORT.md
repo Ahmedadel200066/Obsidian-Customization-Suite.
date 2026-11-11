@@ -18,6 +18,13 @@ vault; live compatibility is not certified.
   switching.
 - Profile-level accent, surface, text, tab-bar opacity/gradient, custom CSS,
   module enablement, and independent module settings.
+- Accessible Global Appearance, Profiles, and Integrations tabs, with a
+  dedicated nested tab for each integration.
+- Per-surface navigation and scroll state persistence for the Obsidian
+  settings tab and ribbon modal; profile IDs remain separately persisted as
+  the active-profile source of truth.
+- Tab-header background transparency, backdrop blur, and linear, elliptical
+  radial, or circular radial gradient controls.
 - Visual controls, collapsible sections, active-profile preview, immediate
   style updates, and debounced settings persistence.
 - Shared settings UI in both the Obsidian plugin settings tab and a
@@ -91,12 +98,23 @@ vault; live compatibility is not certified.
 - Kanban background inputs reject unsafe schemes and paths outside the vault.
 - The ribbon shortcut uses a plugin-owned modal rather than Obsidian's
   undocumented settings-navigation API.
+- Invalid/missing active profile IDs recover to Minimal and are saved during
+  startup.
 
 ## Known issues and unverified behavior
 
 - No real Obsidian vault or installed target plugins were available. Visual
   results, theme compatibility, restart persistence in Obsidian, and native
   Kanban/review interactions still require manual validation.
+- The repository has no profile recommendation logic or theme-detection
+  implementation; the UI explicitly reports that recommendations are
+  unavailable instead of inventing a matching algorithm.
+- A Buy Me a Coffee link was not added because the owner has not supplied its
+  official destination URL. No integration context-menu action was added
+  without a verified stable hook.
+- Tab transparency/blur/gradient CSS targets
+  `.workspace-tab-header-container`; actual compositing and theme overrides
+  must be checked in a live Obsidian window.
 - Inspected plugin source versions may differ from a user's installed
   versions. Kanban DOM selectors and Spaced Repetition review selectors are
   version-sensitive.
@@ -125,7 +143,7 @@ npm test
 rebuilds it in watch mode. The bundle check rejects unresolved local imports
 and validates the manifest and core stylesheet.
 
-Latest validation: `npm ci`, `npm run build`, `npm test` (22 tests), and
+Latest validation: `npm ci`, `npm run build`, `npm test` (25 tests), and
 `git diff --check` passed. These checks use automated tests and do not replace
 testing in Obsidian.
 

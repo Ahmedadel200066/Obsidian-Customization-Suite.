@@ -10,6 +10,7 @@ test("ribbon action opens the settings modal and registered cleanup closes it", 
   class Notice {}
   class Modal {
     constructor() {
+      this.modalEl = { addClass() {} };
       this.contentEl = { addClass() {}, empty() {} };
     }
 
@@ -72,12 +73,15 @@ test("ribbon action opens the settings modal and registered cleanup closes it", 
   const contentEl = { addClass() {}, empty() {} };
   const renders = [];
   const settingsTab = {
-    displayInto(containerEl) { renders.push(["render", containerEl]); },
+    displayInto(containerEl, viewKey) { renders.push(["render", containerEl, viewKey]); },
     releaseDisplayTarget(containerEl) { renders.push(["release", containerEl]); }
   };
   const modal = new CustomizationStudioModal({}, settingsTab);
   modal.contentEl = contentEl;
   modal.open();
   modal.close();
-  assert.deepEqual(renders, [["render", contentEl], ["release", contentEl]]);
+  assert.deepEqual(renders, [
+    ["render", contentEl, "ribbonModal"],
+    ["release", contentEl]
+  ]);
 });

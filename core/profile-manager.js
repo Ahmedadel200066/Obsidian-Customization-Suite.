@@ -15,10 +15,18 @@ const PROFILE_VARIABLE_DEFAULTS = {
   surfaceColor: "#202020",
   textColor: "#dddddd",
   tabBarOpacity: 100,
+  tabBarBlur: 0,
   tabBarGradientColor: "#7c6ce7",
+  tabBarGradientType: "linear",
   tabBarGradientDirection: "to right",
+  tabBarGradientPosition: "center",
   tabBarGradientIntensity: 0
 };
+const TAB_BAR_GRADIENT_TYPES = new Set(["linear", "radial", "circle"]);
+const TAB_BAR_GRADIENT_POSITIONS = new Set([
+  "center", "top", "bottom", "left", "right",
+  "top left", "top right", "bottom left", "bottom right"
+]);
 const TAB_BAR_GRADIENT_DIRECTIONS = new Set([
   "to right", "to left", "to bottom", "to top",
   "to bottom right", "to bottom left", "to top right", "to top left"
@@ -62,13 +70,24 @@ function validateProfile(profile, knownModules, legacyModuleEnabled = {}) {
         throw new Error(`Profile "${profile.id}" has an invalid ${key}.`);
       }
       variables[key] = value;
-    } else if (key === "tabBarOpacity" || key === "tabBarGradientIntensity") {
-      if (typeof value !== "number" || !Number.isInteger(value) || value < 0 || value > 100) {
-        throw new Error(`Profile "${profile.id}" ${key} must be an integer from 0 to 100.`);
+    } else if (key === "tabBarOpacity" || key === "tabBarBlur" || key === "tabBarGradientIntensity") {
+      const max = key === "tabBarBlur" ? 24 : 100;
+      if (typeof value !== "number" || !Number.isInteger(value) || value < 0 || value > max) {
+        throw new Error(`Profile "${profile.id}" ${key} must be an integer from 0 to ${max}.`);
+      }
+      variables[key] = value;
+    } else if (key === "tabBarGradientType") {
+      if (!TAB_BAR_GRADIENT_TYPES.has(value)) {
+        throw new Error(`Profile "${profile.id}" has an unsupported ${key}.`);
       }
       variables[key] = value;
     } else if (key === "tabBarGradientDirection") {
       if (!TAB_BAR_GRADIENT_DIRECTIONS.has(value)) {
+        throw new Error(`Profile "${profile.id}" has an unsupported ${key}.`);
+      }
+      variables[key] = value;
+    } else if (key === "tabBarGradientPosition") {
+      if (!TAB_BAR_GRADIENT_POSITIONS.has(value)) {
         throw new Error(`Profile "${profile.id}" has an unsupported ${key}.`);
       }
       variables[key] = value;
@@ -178,10 +197,13 @@ class ProfileManager {
       }
       ids.add(profile.id);
     }
+    let recoveredActiveProfile = false;
     if (!this.getProfile(this.settingsManager.settings.activeProfileId)) {
       this.settingsManager.settings.activeProfileId = this.builtInProfiles[0].id;
+      recoveredActiveProfile = true;
     }
     this.settingsManager.settings.customProfiles = this.customProfiles;
+    return recoveredActiveProfile;
   }
 
   getProfiles() {

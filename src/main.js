@@ -17,7 +17,7 @@ module.exports = class CustomizationStudioPlugin extends Plugin {
       await this.settingsManager.load();
 
       this.profileManager = new ProfileManager(this.settingsManager);
-      this.profileManager.load();
+      if (this.profileManager.load()) await this.settingsManager.save();
 
       this.themeEngine = new ThemeEngine(this);
       await this.themeEngine.loadCoreCss();
@@ -26,6 +26,7 @@ module.exports = class CustomizationStudioPlugin extends Plugin {
       this.moduleManager.load();
       this.settingsTab = new CustomizationSettingTab(this.app, this);
       this.addSettingTab(this.settingsTab);
+      this.register(() => this.settingsTab.dispose());
       this.settingsModal = new CustomizationStudioModal(this.app, this.settingsTab);
       this.registerCustomizationEntryPoints();
       this.applyCustomization();
@@ -71,6 +72,8 @@ module.exports = class CustomizationStudioPlugin extends Plugin {
   async onunload() {
     let saveError;
     try {
+      this.settingsModal?.close();
+      if (this.settingsTab?.captureViewState()) await this.settingsManager?.save();
       await this.settingsManager?.flush();
     } catch (error) {
       saveError = error;

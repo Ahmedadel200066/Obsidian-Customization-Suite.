@@ -1,13 +1,47 @@
 const DEFAULT_SETTINGS = {
   activeProfileId: "minimal",
   customProfiles: [],
-  moduleEnabled: {}
+  moduleEnabled: {},
+  uiState: {
+    settingsTab: { section: "profiles", moduleId: "kanban", scrollTop: 0 },
+    ribbonModal: { section: "profiles", moduleId: "kanban", scrollTop: 0 }
+  }
 };
+const UI_SECTIONS = new Set(["global", "profiles", "integrations"]);
+
+function validateUiState(value) {
+  if (value === undefined) return JSON.parse(JSON.stringify(DEFAULT_SETTINGS.uiState));
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("Customization Studio uiState setting must be an object.");
+  }
+  const result = JSON.parse(JSON.stringify(DEFAULT_SETTINGS.uiState));
+  for (const key of ["settingsTab", "ribbonModal"]) {
+    const saved = value[key];
+    if (saved === undefined) continue;
+    if (!saved || typeof saved !== "object" || Array.isArray(saved)) {
+      throw new Error(`Customization Studio uiState.${key} must be an object.`);
+    }
+    const section = saved.section ?? result[key].section;
+    const moduleId = saved.moduleId ?? result[key].moduleId;
+    const scrollTop = saved.scrollTop ?? result[key].scrollTop;
+    if (!UI_SECTIONS.has(section) || typeof moduleId !== "string" ||
+        !/^[a-z0-9-]{1,64}$/.test(moduleId) ||
+        typeof scrollTop !== "number" || !Number.isFinite(scrollTop) ||
+        scrollTop < 0 || scrollTop > 10000000) {
+      throw new Error(`Customization Studio uiState.${key} contains invalid navigation state.`);
+    }
+    result[key] = { section, moduleId, scrollTop };
+  }
+  return result;
+}
 
 class SettingsManager {
   constructor(plugin, debounceMs = 300) {
     this.plugin = plugin;
-    this.settings = { ...DEFAULT_SETTINGS };
+    this.settings = {
+      ...DEFAULT_SETTINGS,
+      uiState: JSON.parse(JSON.stringify(DEFAULT_SETTINGS.uiState))
+    };
     this.debounceMs = debounceMs;
     this.revision = 0;
     this.dirty = false;
@@ -20,7 +54,10 @@ class SettingsManager {
   async load() {
     const data = await this.plugin.loadData();
     if (data == null) {
-      this.settings = { ...DEFAULT_SETTINGS };
+      this.settings = {
+        ...DEFAULT_SETTINGS,
+        uiState: JSON.parse(JSON.stringify(DEFAULT_SETTINGS.uiState))
+      };
       return;
     }
 
@@ -50,7 +87,8 @@ class SettingsManager {
       ...DEFAULT_SETTINGS,
       activeProfileId,
       customProfiles,
-      moduleEnabled: { ...moduleEnabled }
+      moduleEnabled: { ...moduleEnabled },
+      uiState: validateUiState(data.uiState)
     };
   }
 
@@ -112,4 +150,4 @@ class SettingsManager {
   }
 }
 
-module.exports = { DEFAULT_SETTINGS, SettingsManager };
+module.exports = { DEFAULT_SETTINGS, SettingsManager, validateUiState };

@@ -1,12 +1,104 @@
 .customization-studio-settings {
   max-width: 1100px;
+  max-height: min(76vh, 760px);
   margin: 0 auto;
-  padding: 0 0 2rem;
+  padding: 0 0 1rem;
+  overflow: auto;
+  overscroll-behavior: contain;
 }
 
 .customization-studio-modal {
-  max-height: 80vh;
-  overflow-y: auto;
+  max-height: 78vh;
+}
+
+.modal.customization-studio-modal {
+  width: min(92vw, 1100px);
+  max-width: calc(100vw - 2rem);
+}
+
+.modal.customization-studio-modal .modal-content {
+  max-height: 82vh;
+  overflow: hidden;
+}
+
+.customization-studio-settings .cs-settings-header {
+  margin-bottom: 0.75rem;
+}
+
+.customization-studio-settings .cs-settings-header > p {
+  margin-top: 0.25rem;
+  color: var(--text-muted);
+}
+
+.customization-studio-settings .cs-active-profile-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.65rem;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-m, 10px);
+  padding: 0.6rem 0.75rem;
+  background: var(--background-secondary);
+}
+
+.customization-studio-settings .cs-active-profile-badge {
+  border-radius: 999px;
+  padding: 0.2rem 0.55rem;
+  color: var(--text-on-accent, var(--text-normal));
+  background: var(--interactive-accent);
+  font-size: var(--font-smaller);
+  font-weight: var(--font-semibold, 600);
+  letter-spacing: 0.04em;
+}
+
+.customization-studio-settings .cs-profile-modules {
+  color: var(--text-muted);
+  font-size: var(--font-smaller);
+}
+
+.customization-studio-settings .cs-primary-tabs,
+.customization-studio-settings .cs-integration-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  border-bottom: 1px solid var(--background-modifier-border);
+  margin-bottom: 0.75rem;
+}
+
+.customization-studio-settings .cs-primary-tabs button,
+.customization-studio-settings .cs-integration-tabs button {
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: var(--radius-s, 6px) var(--radius-s, 6px) 0 0;
+  padding: 0.6rem 0.8rem;
+  color: var(--text-muted);
+  background: transparent;
+  cursor: pointer;
+}
+
+.customization-studio-settings .cs-primary-tabs button.is-active,
+.customization-studio-settings .cs-integration-tabs button.is-active {
+  border-bottom-color: var(--interactive-accent);
+  color: var(--text-normal);
+  background: var(--background-modifier-hover);
+  font-weight: var(--font-semibold, 600);
+}
+
+.customization-studio-settings .cs-primary-panel,
+.customization-studio-settings .cs-integration-panel {
+  min-width: 0;
+}
+
+.customization-studio-settings .cs-integration-panel {
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-m, 10px);
+  padding: 0.75rem;
+  background: var(--background-primary);
+}
+
+.customization-studio-settings .cs-suggestions-unavailable {
+  color: var(--text-muted);
+  font-size: var(--font-smaller);
 }
 
 .customization-studio-settings .cs-section,
@@ -50,29 +142,6 @@
   min-width: min(45vw, 520px);
 }
 
-.customization-studio-settings .cs-profile-preview {
-  border: 1px solid var(--background-modifier-border, rgba(127, 127, 127, 0.25));
-  border-radius: var(--radius-m, 10px);
-  margin: 0.75rem 0 1rem;
-  padding: 1rem;
-  background: var(--background-secondary);
-}
-
-.customization-studio-settings .cs-profile-preview h3,
-.customization-studio-settings .cs-profile-preview p {
-  margin: 0;
-}
-
-.customization-studio-settings .cs-profile-preview h3 {
-  color: var(--text-accent);
-  font-size: 1.1em;
-}
-
-.customization-studio-settings .cs-profile-preview p {
-  margin-top: 0.4rem;
-  color: var(--text-muted);
-}
-
 .customization-studio-settings .cs-profile-swatches {
   display: flex;
   gap: 0.5rem;
@@ -84,10 +153,6 @@
   height: 1.5rem;
   border: 1px solid var(--background-modifier-border);
   border-radius: 50%;
-}
-
-.customization-studio-settings .cs-profile-modules {
-  font-size: var(--font-smaller);
 }
 
 .customization-studio-settings .setting-item-control .slider {
@@ -111,6 +176,17 @@
 @media (max-width: 700px) {
   .customization-studio-settings {
     padding-inline: 0.25rem;
+  }
+
+  .modal.customization-studio-modal {
+    width: calc(100vw - 1rem);
+    max-width: calc(100vw - 1rem);
+  }
+
+  .customization-studio-settings .cs-primary-tabs button,
+  .customization-studio-settings .cs-integration-tabs button {
+    flex: 1 1 auto;
+    padding-inline: 0.5rem;
   }
 
   .customization-studio-settings .setting-item {

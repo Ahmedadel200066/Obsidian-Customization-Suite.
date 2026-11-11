@@ -2,7 +2,7 @@ const assert = require("node:assert/strict");
 const test = require("node:test");
 const { SettingsManager } = require("../core/settings-manager");
 const { ProfileManager } = require("../core/profile-manager");
-const { ThemeEngine } = require("../core/theme-engine");
+const { ThemeEngine, tabBarGradient } = require("../core/theme-engine");
 const { ModuleManager, MODULES } = require("../core/module-manager");
 const { scopeCss } = require("../modules/css-scope");
 const kanban = require("../modules/kanban");
@@ -164,6 +164,45 @@ test("legacy global corner radius migrates away and tab bar settings validate", 
   assert.equal(variables.tabBarGradientColor, "#abcdef");
   assert.equal(variables.tabBarGradientDirection, "to bottom right");
   assert.equal(variables.tabBarGradientIntensity, 30);
+  assert.equal(variables.tabBarBlur, 0);
+  assert.equal(variables.tabBarGradientType, "linear");
+  assert.equal(variables.tabBarGradientPosition, "center");
+});
+
+test("UI navigation state persists per view without storing DOM references", async () => {
+  const plugin = makePlugin({
+    uiState: {
+      settingsTab: { section: "integrations", moduleId: "bases", scrollTop: 245 },
+      ribbonModal: { section: "global", moduleId: "kanban", scrollTop: 18 }
+    }
+  });
+  const settings = new SettingsManager(plugin);
+  await settings.load();
+  await settings.save();
+  const restarted = new SettingsManager(plugin);
+  await restarted.load();
+  assert.deepEqual(restarted.settings.uiState, {
+    settingsTab: { section: "integrations", moduleId: "bases", scrollTop: 245 },
+    ribbonModal: { section: "global", moduleId: "kanban", scrollTop: 18 }
+  });
+
+  const invalid = new SettingsManager(makePlugin({
+    uiState: { settingsTab: { section: "broken", moduleId: "bases", scrollTop: 0 } }
+  }));
+  await assert.rejects(() => invalid.load(), /invalid navigation state/);
+});
+
+test("invalid active profile recovers to Minimal and can be persisted", async () => {
+  const plugin = makePlugin({ activeProfileId: "deleted-profile", customProfiles: [] });
+  const settings = new SettingsManager(plugin);
+  await settings.load();
+  const profiles = new ProfileManager(settings);
+  assert.equal(profiles.load(), true);
+  assert.equal(profiles.getActiveProfile().id, "minimal");
+  assert.equal(settings.settings.activeProfileId, "minimal");
+  await settings.save();
+  const restarted = await loadProfileManager(plugin);
+  assert.equal(restarted.profiles.getActiveProfile().id, "minimal");
 });
 
 test("debounces rapid writes into a single persistence operation", async () => {
@@ -228,6 +267,14 @@ test("profile import rejects invalid module settings and scoped CSS escapes", as
   const plugin = makePlugin();
   const { profiles } = await loadProfileManager(plugin);
   assert.throws(() => profiles.importProfile(JSON.stringify({
+    id: "invalid-blur",
+    name: "Invalid blur",
+    description: "",
+    variables: { tabBarBlur: 25 },
+    customCss: "",
+    modules: {}
+  })), /tabBarBlur must be an integer from 0 to 24/);
+  assert.throws(() => profiles.importProfile(JSON.stringify({
     id: "invalid",
     name: "Invalid",
     description: "",
@@ -291,7 +338,9 @@ test("tab bar styles are scoped and reflect validated opacity and gradient setti
       tabBarOpacity: 40,
       tabBarGradientColor: "#abcdef",
       tabBarGradientDirection: "to left",
-      tabBarGradientIntensity: 60
+      tabBarGradientIntensity: 60,
+      tabBarGradientType: "linear",
+      tabBarBlur: 9
     }
   });
   plugin.profileManager = profiles;
@@ -302,7 +351,50 @@ test("tab bar styles are scoped and reflect validated opacity and gradient setti
   assert.match(stylesheet, /\.workspace-tab-header-container\s*\{/);
   assert.match(stylesheet, /background-color: rgba\(17, 34, 51, 0\.4\)/);
   assert.match(stylesheet, /linear-gradient\(to left, rgba\(171, 205, 239, 0\.6\), transparent\)/);
+  assert.match(stylesheet, /backdrop-filter: blur\(9px\)/);
+  assert.match(stylesheet, /-webkit-backdrop-filter: blur\(9px\)/);
   assert.doesNotMatch(stylesheet, /--cs-border-radius/);
+});
+
+test("transparent tab bar keeps text opaque and supports linear and radial gradients", async () => {
+  const plugin = makePlugin();
+  const { profiles } = await loadProfileManager(plugin);
+  profiles.createCustomProfile("Transparency");
+  plugin.profileManager = profiles;
+  const theme = new ThemeEngine(plugin);
+
+  for (const [opacity, alpha] of [[0, "0"], [50, "0.5"], [100, "1"]]) {
+    profiles.updateActiveProfile({
+      variables: { tabBarOpacity: opacity, tabBarGradientIntensity: 0, tabBarBlur: 0 }
+    });
+    theme.apply(profiles.getActiveProfile());
+    const css = theme.styles.get("variables").textContent;
+    if (opacity === 0) assert.match(css, /background-color: transparent/);
+    else assert.match(css, new RegExp(`background-color: rgba\\(32, 32, 32, ${alpha}\\)`));
+    assert.match(css, /background-image: none/);
+    assert.doesNotMatch(css, /\.workspace-tab-header-container\s*\{[^}]*opacity:/s);
+  }
+
+  const radial = tabBarGradient({
+    tabBarGradientType: "radial",
+    tabBarGradientPosition: "top right",
+    tabBarGradientColor: "#123456",
+    tabBarGradientIntensity: 50
+  });
+  const circle = tabBarGradient({
+    tabBarGradientType: "circle",
+    tabBarGradientPosition: "bottom left",
+    tabBarGradientColor: "#123456",
+    tabBarGradientIntensity: 50
+  });
+  assert.equal(radial, "radial-gradient(ellipse at top right, rgba(18, 52, 86, 0.5), transparent)");
+  assert.equal(circle, "radial-gradient(circle at bottom left, rgba(18, 52, 86, 0.5), transparent)");
+  assert.equal(tabBarGradient({
+    tabBarGradientType: "linear",
+    tabBarGradientDirection: "to bottom",
+    tabBarGradientColor: "#123456",
+    tabBarGradientIntensity: 50
+  }), "linear-gradient(to bottom, rgba(18, 52, 86, 0.5), transparent)");
 });
 
 test("target detection distinguishes community plugins and the Bases core plugin API", async () => {
