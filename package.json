@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "description": "A modular visual customization plugin for Obsidian.",
+  "author": "Ahmed Adel",
   "scripts": {
     "build": "node build.mjs",
     "dev": "node build.mjs --watch",

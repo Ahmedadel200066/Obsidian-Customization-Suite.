@@ -55,20 +55,34 @@ jobs:
           if (manifest.id !== "customization-studio") {
             throw new Error(`Unexpected plugin ID: ${manifest.id}`);
           }
+          if (manifest.name !== "Customization Studio") {
+            throw new Error(`Unexpected plugin name: ${manifest.name}`);
+          }
+          if (manifest.author !== "Ahmed Adel") {
+            throw new Error(`Unexpected plugin author: ${manifest.author}`);
+          }
           NODE
 
           zip -q -r "$RUNNER_TEMP/Customization-Studio.zip" \
             main.js manifest.json styles
 
           python3 - "$RUNNER_TEMP/Customization-Studio.zip" <<'PY'
+          import json
           import sys
           from zipfile import ZipFile
 
           with ZipFile(sys.argv[1]) as archive:
               names = set(archive.namelist())
+              manifest = json.loads(archive.read("manifest.json"))
           required = {"main.js", "manifest.json", "styles/core.css"}
           if not required <= names:
               raise SystemExit(f"ZIP missing files: {sorted(required - names)}")
+          if manifest.get("author") != "Ahmed Adel":
+              raise SystemExit(f"Packaged manifest has unexpected author: {manifest.get('author')}")
+          if manifest.get("name") != "Customization Studio":
+              raise SystemExit(f"Packaged manifest has unexpected name: {manifest.get('name')}")
+          if manifest.get("id") != "customization-studio":
+              raise SystemExit(f"Packaged manifest has unexpected ID: {manifest.get('id')}")
           if any(name.startswith(("src/", "core/", "modules/", "tests/", "node_modules/")) for name in names):
               raise SystemExit("Installable ZIP unexpectedly includes source or development files")
           if any(name.startswith(("dist/", "Customization-Studio/")) for name in names):

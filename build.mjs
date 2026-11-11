@@ -23,7 +23,13 @@ async function validatePluginBundle() {
       `Expected only the Obsidian host API to remain external; found ${imports.join(", ") || "no imports"}.`
     );
   }
-  JSON.parse(await readFile(path.join(root, "manifest.json"), "utf8"));
+  const manifest = JSON.parse(await readFile(path.join(root, "manifest.json"), "utf8"));
+  if (manifest.author !== "Ahmed Adel") {
+    throw new Error(`Expected manifest author "Ahmed Adel"; found "${manifest.author}".`);
+  }
+  if (manifest.name !== "Customization Studio" || manifest.id !== "customization-studio") {
+    throw new Error("Plugin name or ID changed unexpectedly in the root manifest.");
+  }
   await readFile(path.join(root, "styles/core.css"), "utf8");
 }
 

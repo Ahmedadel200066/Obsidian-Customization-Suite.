@@ -6,7 +6,7 @@ logic separate, applies plugin-owned styles, and stores customization profiles
 through Obsidian's plugin data API. It does not edit target plugin sources,
 settings, review schedules, Base definitions, or user content.
 
-**Author:** [Ahmedadel200066](https://github.com/Ahmedadel200066)
+**Author:** [Ahmed Adel](https://github.com/Ahmedadel200066)
 
 **Minimum Obsidian version:** 1.9.0 (required for Bases support)
 
@@ -218,7 +218,7 @@ These checks remain necessary before claiming runtime compatibility:
 
 ## Author
 
-[Ahmedadel200066 on GitHub](https://github.com/Ahmedadel200066)
+[Ahmed Adel on GitHub](https://github.com/Ahmedadel200066)
 
 No Buy Me a Coffee destination has been added because the project owner has not
 provided an official URL.
