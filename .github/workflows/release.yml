@@ -34,7 +34,7 @@ jobs:
           node --input-type=module <<'NODE'
           import { readFile, stat } from "node:fs/promises";
 
-          for (const file of ["main.js", "manifest.json", "styles/core.css"]) {
+          for (const file of ["main.js", "manifest.json", "styles.css"]) {
             if ((await stat(file)).size === 0) throw new Error(`${file} is empty`);
           }
 
@@ -64,7 +64,7 @@ jobs:
           NODE
 
           zip -q -r "$RUNNER_TEMP/Customization-Studio.zip" \
-            main.js manifest.json styles
+            main.js manifest.json styles.css LICENSE
 
           python3 - "$RUNNER_TEMP/Customization-Studio.zip" <<'PY'
           import json
@@ -74,7 +74,7 @@ jobs:
           with ZipFile(sys.argv[1]) as archive:
               names = set(archive.namelist())
               manifest = json.loads(archive.read("manifest.json"))
-          required = {"main.js", "manifest.json", "styles/core.css"}
+          required = {"main.js", "manifest.json", "styles.css"}
           if not required <= names:
               raise SystemExit(f"ZIP missing files: {sorted(required - names)}")
           if manifest.get("author") != "Ahmed Adel":
@@ -90,7 +90,7 @@ jobs:
           print("Installable ZIP verified: plugin files are at archive root.")
           PY
 
-      - name: Attach installable ZIP to GitHub release
+      - name: Attach standard plugin assets and optional ZIP to GitHub release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release upload "$GITHUB_REF_NAME" "$RUNNER_TEMP/Customization-Studio.zip" --clobber
+        run: gh release upload "$GITHUB_REF_NAME" main.js manifest.json styles.css LICENSE "$RUNNER_TEMP/Customization-Studio.zip" --clobber

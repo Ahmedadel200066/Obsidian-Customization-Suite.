@@ -1,3 +1,26 @@
+/*
+MIT License
+
+Copyright (c) 2026 Ahmed Adel
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+*/
 var __getOwnPropNames = Object.getOwnPropertyNames;
 var __commonJS = (cb, mod) => function __require() {
   try {
@@ -1322,13 +1345,317 @@ var require_bases = __commonJS({
   }
 });
 
+// modules/create-style-module.js
+var require_create_style_module = __commonJS({
+  "modules/create-style-module.js"(exports2, module2) {
+    var { BaseModuleController } = require_base_controller();
+    var { createDefaults, validateSettings } = require_settings_utils();
+    var { scopeCss } = require_css_scope();
+    function createStyleModule({ id, name, pluginId, root, schema, groups, styles, compatibilityNote }) {
+      const settingsSchema = {
+        ...schema,
+        customCss: { type: "text", default: "", maxLength: 1e4 }
+      };
+      const module3 = {
+        id,
+        name,
+        defaultEnabled: false,
+        target: { type: "community", ids: [pluginId] },
+        rootSelector: root,
+        selectors: { root },
+        compatibilityNote,
+        settingsSchema,
+        defaultSettings: createDefaults(settingsSchema),
+        controlGroups: groups,
+        validateSettings(value) {
+          const result = validateSettings(name, value, settingsSchema);
+          scopeCss(result.customCss, root);
+          return result;
+        },
+        styles,
+        customCss: (value) => scopeCss(value.customCss, root),
+        createController: (plugin, manager, definition) => new BaseModuleController(plugin, manager, definition)
+      };
+      return module3;
+    }
+    function paletteColor(settings, key, themeVariable) {
+      return settings.useThemeColors ? `var(${themeVariable})` : settings[key];
+    }
+    module2.exports = { createStyleModule, paletteColor };
+  }
+});
+
+// modules/tasks/index.js
+var require_tasks = __commonJS({
+  "modules/tasks/index.js"(exports2, module2) {
+    var { createStyleModule, paletteColor } = require_create_style_module();
+    module2.exports = createStyleModule({
+      id: "tasks",
+      name: "Tasks",
+      pluginId: "obsidian-tasks-plugin",
+      root: ".plugin-tasks-query-result, .tasks-group-heading, .tasks-modal",
+      compatibilityNote: "Source-inspected against Tasks 8.6.0 (which requires Obsidian 1.13.1). Query lists, group headings, metadata chips, and edit-form spacing. Live task editing still needs vault testing.",
+      schema: {
+        useThemeColors: { type: "boolean", default: true },
+        groupColor: { type: "color", default: "#9b8bff" },
+        dividerColor: { type: "color", default: "#44444d" },
+        chipBackground: { type: "color", default: "#30303a" },
+        rowSpacing: { type: "range", default: 4, min: 0, max: 16 },
+        textSize: { type: "range", default: 15, min: 11, max: 22 },
+        groupSize: { type: "range", default: 16, min: 12, max: 24 },
+        groupSpacing: { type: "range", default: 16, min: 4, max: 40 },
+        rowDividers: { type: "boolean", default: false },
+        metadataChips: { type: "boolean", default: true },
+        chipRadius: { type: "range", default: 4, min: 0, max: 16 },
+        modalSectionSpacing: { type: "range", default: 10, min: 4, max: 28 }
+      },
+      groups: [
+        { name: "Task query results", controls: [
+          { key: "textSize", name: "Task text size", type: "range", unit: "px" },
+          { key: "rowSpacing", name: "Task row spacing", type: "range", unit: "px" },
+          { key: "rowDividers", name: "Task row dividers", type: "boolean" },
+          { key: "groupSize", name: "Task group heading size", type: "range", unit: "px" },
+          { key: "groupSpacing", name: "Task group spacing", type: "range", unit: "px" },
+          { key: "metadataChips", name: "Date metadata chips", type: "boolean", desc: "Adds a surface behind dates without changing urgency, status colors, or click handlers." },
+          { key: "chipRadius", name: "Date chip corner radius", type: "range", unit: "px" }
+        ] },
+        { name: "Tasks edit form and colors", controls: [
+          { key: "modalSectionSpacing", name: "Task edit form section spacing", type: "range", unit: "px" },
+          { key: "useThemeColors", name: "Follow theme colors", type: "boolean", desc: "Turn off to use custom colors. Checkbox states, priority, and error indicators are never recolored by this module." },
+          { key: "groupColor", name: "Task group heading color", type: "color" },
+          { key: "dividerColor", name: "Task divider color", type: "color" },
+          { key: "chipBackground", name: "Task date chip background", type: "color" }
+        ] }
+      ],
+      styles(settings) {
+        return `.plugin-tasks-query-result { font-size: ${settings.textSize}px; }
+    .plugin-tasks-query-result > li {
+      padding-block: ${settings.rowSpacing}px;
+      ${settings.rowDividers ? `border-bottom: 1px solid ${paletteColor(settings, "dividerColor", "--background-modifier-border")};` : ""}
+    }
+    .tasks-group-heading {
+      color: ${paletteColor(settings, "groupColor", "--text-accent")};
+      font-size: ${settings.groupSize}px;
+      margin-block-start: ${settings.groupSpacing}px;
+      margin-block-end: ${Math.round(settings.groupSpacing / 2)}px;
+    }
+    ${settings.metadataChips ? `.plugin-tasks-query-result :is(.task-due, .task-scheduled, .task-start, .task-created, .task-done, .task-cancelled) {
+      background: ${paletteColor(settings, "chipBackground", "--background-secondary")};
+      border-radius: ${settings.chipRadius}px;
+      padding-inline: 0.2em;
+      box-decoration-break: clone;
+      -webkit-box-decoration-break: clone;
+    }` : ""}
+    .tasks-modal section + section { margin-top: ${settings.modalSectionSpacing}px; }`;
+      }
+    });
+  }
+});
+
+// modules/dataview/index.js
+var require_dataview = __commonJS({
+  "modules/dataview/index.js"(exports2, module2) {
+    var { createStyleModule, paletteColor } = require_create_style_module();
+    module2.exports = createStyleModule({
+      id: "dataview",
+      name: "Dataview",
+      pluginId: "dataview",
+      root: ".block-language-dataview, .table-view-table, .dataview.inline-field-key, .dataview.inline-field-value, .dataview.inline-field-standalone-value, .dataview-result-list-root-ul",
+      compatibilityNote: "Source-inspected against Dataview 0.5.68. Standard tables, lists, and inline fields only; arbitrary DataviewJS markup is not covered. Live vault testing is still required.",
+      schema: {
+        useThemeColors: { type: "boolean", default: true },
+        headerBackground: { type: "color", default: "#30303a" },
+        headerText: { type: "color", default: "#eeeeee" },
+        stripeBackground: { type: "color", default: "#282832" },
+        borderColor: { type: "color", default: "#44444d" },
+        fieldBackground: { type: "color", default: "#30303a" },
+        fieldText: { type: "color", default: "#dddddd" },
+        fontSize: { type: "range", default: 14, min: 11, max: 22 },
+        cellPadding: { type: "range", default: 8, min: 2, max: 20 },
+        stripedRows: { type: "boolean", default: true },
+        rowDividers: { type: "boolean", default: true },
+        listSpacing: { type: "range", default: 3, min: 0, max: 14 },
+        fieldRadius: { type: "range", default: 4, min: 0, max: 16 }
+      },
+      groups: [
+        { name: "Tables and lists", controls: [
+          { key: "fontSize", name: "Dataview table text size", type: "range", unit: "px" },
+          { key: "cellPadding", name: "Dataview cell padding", type: "range", unit: "px" },
+          { key: "stripedRows", name: "Alternating row backgrounds", type: "boolean" },
+          { key: "rowDividers", name: "Show row dividers", type: "boolean" },
+          { key: "listSpacing", name: "Dataview list spacing", type: "range", unit: "px" },
+          { key: "fieldRadius", name: "Inline field corner radius", type: "range", unit: "px" }
+        ] },
+        { name: "Dataview colors", controls: [
+          { key: "useThemeColors", name: "Follow theme colors", type: "boolean", desc: "Turn off to use the custom colors below. Query output and click behavior are unchanged." },
+          { key: "headerBackground", name: "Dataview header background", type: "color" },
+          { key: "headerText", name: "Dataview header text", type: "color" },
+          { key: "stripeBackground", name: "Dataview alternating background", type: "color" },
+          { key: "borderColor", name: "Dataview row border", type: "color" },
+          { key: "fieldBackground", name: "Inline field background", type: "color" },
+          { key: "fieldText", name: "Inline field text", type: "color" }
+        ] }
+      ],
+      styles(settings) {
+        const color = (key, variable) => paletteColor(settings, key, variable);
+        return `.table-view-table {
+      font-size: ${settings.fontSize}px;
+      border-collapse: collapse;
+    }
+    .table-view-table > thead > tr > th {
+      background: ${color("headerBackground", "--background-secondary")};
+      color: ${color("headerText", "--text-normal")};
+      padding: ${settings.cellPadding}px;
+      border-bottom: 1px solid ${color("borderColor", "--background-modifier-border")};
+    }
+    .table-view-table > tbody > tr > td {
+      padding: ${settings.cellPadding}px;
+      border-bottom: ${settings.rowDividers ? `1px solid ${color("borderColor", "--background-modifier-border")}` : "0"};
+    }
+    ${settings.stripedRows ? `.table-view-table > tbody > tr:nth-child(even) {
+      background: ${color("stripeBackground", "--background-secondary")};
+    }` : ""}
+    .table-view-table > tbody > tr:hover { background: var(--background-modifier-hover); }
+    .dataview-result-list-root-ul li { margin-block: ${settings.listSpacing}px; }
+    .dataview.inline-field-key, .dataview.inline-field-value, .dataview.inline-field-standalone-value {
+      background: ${color("fieldBackground", "--background-secondary")};
+      color: ${color("fieldText", "--text-normal")};
+      border-radius: ${settings.fieldRadius}px;
+    }`;
+      }
+    });
+  }
+});
+
+// modules/calendar/index.js
+var require_calendar = __commonJS({
+  "modules/calendar/index.js"(exports2, module2) {
+    var { createStyleModule, paletteColor } = require_create_style_module();
+    module2.exports = createStyleModule({
+      id: "calendar",
+      name: "Calendar",
+      pluginId: "calendar",
+      root: "#calendar-container",
+      compatibilityNote: "Source-inspected against Calendar 1.5.10. Uses its documented CSS variables; live vault compatibility still needs testing.",
+      schema: {
+        useThemeColors: { type: "boolean", default: true },
+        textColor: { type: "color", default: "#dddddd" },
+        mutedColor: { type: "color", default: "#999999" },
+        todayColor: { type: "color", default: "#7c6ce7" },
+        dotColor: { type: "color", default: "#7c6ce7" },
+        weekendBackground: { type: "color", default: "#282832" },
+        highlightWeekends: { type: "boolean", default: true },
+        fontSize: { type: "range", default: 14, min: 11, max: 20 },
+        padding: { type: "range", default: 8, min: 0, max: 24 },
+        radius: { type: "range", default: 8, min: 0, max: 24 }
+      },
+      groups: [
+        { name: "Calendar layout", controls: [
+          { key: "fontSize", name: "Calendar text size", type: "range", unit: "px" },
+          { key: "padding", name: "Calendar outer padding", type: "range", unit: "px" },
+          { key: "radius", name: "Calendar corner radius", type: "range", unit: "px" },
+          { key: "highlightWeekends", name: "Highlight weekends", type: "boolean" }
+        ] },
+        { name: "Calendar colors", controls: [
+          { key: "useThemeColors", name: "Follow theme colors", type: "boolean", desc: "Turn off to use the custom colors below. Dates and daily-note behavior are unchanged." },
+          { key: "textColor", name: "Calendar day and title text", type: "color" },
+          { key: "mutedColor", name: "Calendar headings and navigation", type: "color" },
+          { key: "todayColor", name: "Calendar today text", type: "color" },
+          { key: "dotColor", name: "Calendar activity dots", type: "color" },
+          { key: "weekendBackground", name: "Calendar weekend background", type: "color" }
+        ] }
+      ],
+      styles(settings) {
+        const text = paletteColor(settings, "textColor", "--text-normal");
+        const muted = paletteColor(settings, "mutedColor", "--text-muted");
+        return `#calendar-container {
+      --color-text-title: ${text};
+      --color-text-day: ${text};
+      --color-text-heading: ${muted};
+      --color-text-weeknum: ${muted};
+      --color-arrow: ${muted};
+      --color-button: ${muted};
+      --color-text-today: ${paletteColor(settings, "todayColor", "--interactive-accent")};
+      --color-dot: ${paletteColor(settings, "dotColor", "--interactive-accent")};
+      --color-background-weekend: ${settings.highlightWeekends ? paletteColor(settings, "weekendBackground", "--background-secondary") : "transparent"};
+      font-size: ${settings.fontSize}px;
+      padding: ${settings.padding}px;
+      border-radius: ${settings.radius}px;
+    }`;
+      }
+    });
+  }
+});
+
+// modules/day-planner/index.js
+var require_day_planner = __commonJS({
+  "modules/day-planner/index.js"(exports2, module2) {
+    var { createStyleModule, paletteColor } = require_create_style_module();
+    var ROOT = '[data-type="planner-timeline"], [data-type="planner-weekly"], [data-type="planner-time-tracker"]';
+    module2.exports = createStyleModule({
+      id: "day-planner",
+      name: "Day Planner",
+      pluginId: "obsidian-day-planner",
+      root: ROOT,
+      compatibilityNote: "Source-inspected against Day Planner 0.35.1. Timeline, weekly, and time-tracker appearance only. Time positions, drag handles, per-event colors, and active borders are preserved. Native drag/resize still needs vault testing.",
+      schema: {
+        useThemeColors: { type: "boolean", default: true },
+        timelineBackground: { type: "color", default: "#202027" },
+        gridColor: { type: "color", default: "#44444d" },
+        textSize: { type: "range", default: 13, min: 10, max: 20 },
+        blockRadius: { type: "range", default: 6, min: 0, max: 18 },
+        contentSpacing: { type: "range", default: 4, min: 0, max: 12 },
+        contentPadding: { type: "range", default: 4, min: 0, max: 12 },
+        gridWidth: { type: "range", default: 1, min: 0, max: 3 },
+        blockShadow: { type: "range", default: 15, min: 0, max: 50 },
+        fontFamily: { type: "select", default: "interface", options: ["interface", "text", "monospace"] }
+      },
+      groups: [
+        { name: "Timeline and time blocks", controls: [
+          { key: "textSize", name: "Planner time-block text size", type: "range", unit: "px" },
+          { key: "fontFamily", name: "Planner time-block font", type: "select" },
+          { key: "blockRadius", name: "Planner time-block corner radius", type: "range", unit: "px" },
+          { key: "contentSpacing", name: "Planner content gap", type: "range", unit: "px" },
+          { key: "contentPadding", name: "Planner content inner padding", type: "range", unit: "px", desc: "Does not change block position or duration; large values can leave less room in short blocks." },
+          { key: "gridWidth", name: "Planner hour separator width", type: "range", unit: "px" },
+          { key: "blockShadow", name: "Planner block shadow strength", type: "range", unit: "%" }
+        ] },
+        { name: "Planner colors", controls: [
+          { key: "useThemeColors", name: "Follow theme colors", type: "boolean", desc: "Turn off to use the custom timeline and grid colors. Event colors and state borders remain owned by Day Planner." },
+          { key: "timelineBackground", name: "Planner timeline background", type: "color" },
+          { key: "gridColor", name: "Planner hour separator color", type: "color" }
+        ] }
+      ],
+      styles(settings) {
+        const font = { interface: "--font-interface", text: "--font-text", monospace: "--font-monospace" }[settings.fontFamily];
+        return `:is(${ROOT}) {
+      --column-background-color: ${paletteColor(settings, "timelineBackground", "--background-primary")};
+      --planner-time-block-font-size: ${settings.textSize}px;
+      --planner-time-block-font-family: var(${font});
+      --time-block-border-radius: ${settings.blockRadius}px;
+      --time-block-content-layout-gap: ${settings.contentSpacing}px;
+      --time-block-content-layout-padding: ${settings.contentPadding}px;
+      --planner-time-block-shadow-on-timeline: 0 2px 6px rgba(0, 0, 0, ${settings.blockShadow / 100});
+    }
+    :is(${ROOT}) .view-content {
+      --border-base: ${settings.gridWidth}px solid ${paletteColor(settings, "gridColor", "--background-modifier-border")};
+    }`;
+      }
+    });
+  }
+});
+
 // modules/index.js
 var require_modules = __commonJS({
   "modules/index.js"(exports2, module2) {
     module2.exports = [
       require_kanban(),
       require_spaced_repetition(),
-      require_bases()
+      require_bases(),
+      require_tasks(),
+      require_dataview(),
+      require_calendar(),
+      require_day_planner()
     ];
   }
 });
@@ -1596,7 +1923,7 @@ var require_profile_manager = __commonJS({
         }
       }
       for (const module3 of MODULES) {
-        if (moduleEnabled[module3.id] === void 0) moduleEnabled[module3.id] = true;
+        if (moduleEnabled[module3.id] === void 0) moduleEnabled[module3.id] = module3.defaultEnabled !== false;
       }
       return {
         id: profile.id,
@@ -1800,7 +2127,8 @@ var require_theme_engine = __commonJS({
       }
       async loadCoreCss() {
         const configDir = this.plugin.app.vault.configDir.replace(/\/+$/, "");
-        const path = `${configDir}/plugins/${this.plugin.manifest.id}/styles/core.css`;
+        const pluginDir = (this.plugin.manifest.dir || `${configDir}/plugins/${this.plugin.manifest.id}`).replace(/\/+$/, "");
+        const path = `${pluginDir}/styles.css`;
         try {
           const css = await this.plugin.app.vault.adapter.read(path);
           this.setStyle("core", css);
@@ -2075,12 +2403,14 @@ var require_settings_tab = __commonJS({
           this.viewContexts.set(containerEl, context);
           this.openViews.add(context);
         }
+        for (const observer of context.tabResizeObservers || []) observer.disconnect();
+        context.tabResizeObservers = [];
         containerEl.empty();
         containerEl.addClass("customization-studio-settings");
         const header = containerEl.createEl("header", { cls: "cs-settings-header" });
         header.createEl("h2", { text: "Customization Studio" });
         header.createEl("p", {
-          text: "Visual profiles for Kanban, Spaced Repetition, and Obsidian Bases. Settings preview immediately and save automatically."
+          text: "Visual profiles for Obsidian and supported plugins. Settings preview immediately and save automatically."
         });
         const activeProfile = this.plugin.profileManager.getActiveProfile();
         const profileHeader = header.createEl("div", {
@@ -2146,6 +2476,7 @@ var require_settings_tab = __commonJS({
           tab.setAttribute("id", `cs-${context.viewKey}-tab-${id}`);
           if (context.section === id) tab.addClass("is-active");
           tab.addEventListener("click", () => {
+            context.focusPrimaryTab = tabs.findIndex(([tabId]) => tabId === id);
             this.setViewState(context, { section: id });
             this.refreshDisplay(context);
           });
@@ -2159,6 +2490,7 @@ var require_settings_tab = __commonJS({
             this.refreshDisplay(context);
           });
         }
+        this.decorateTabs(navigation, tabElements, context, "primary");
         if (context.focusPrimaryTab !== void 0) {
           tabElements[context.focusPrimaryTab]?.focus();
           delete context.focusPrimaryTab;
@@ -2173,7 +2505,59 @@ var require_settings_tab = __commonJS({
           panel.setAttribute("aria-label", "Integrations");
           this.displayModules(panel, context);
         }
+        const footer = containerEl.createEl("footer", { cls: "cs-settings-footer" });
+        footer.createEl("p", {
+          text: "Support via plugin details."
+        });
         containerEl.scrollTop = context.scrollTop;
+      }
+      decorateTabs(navigation, tabs, context, key) {
+        const active = tabs.find((tab) => tab.getAttribute("aria-selected") === "true");
+        if (!active?.getBoundingClientRect) return;
+        const doc = navigation.ownerDocument;
+        const selected = active.id;
+        const previous = context.tabIndicators?.[key];
+        const indicator = navigation.createEl("span", {
+          cls: "cs-tab-indicator",
+          attr: { "aria-hidden": "true" }
+        });
+        navigation.addClass("cs-animated-tabs");
+        const position = { left: active.offsetLeft, width: active.offsetWidth, selected };
+        indicator.style.left = `${position.left}px`;
+        indicator.style.width = `${position.width}px`;
+        const reducedMotion = doc.defaultView?.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+        if (previous && previous.selected !== selected && !reducedMotion) {
+          indicator.animate?.([
+            { left: `${previous.left}px`, width: `${previous.width}px` },
+            { left: `${position.left}px`, width: `${position.width}px` }
+          ], { duration: 220, easing: "ease-out" });
+          const panel = key === "primary" ? context.panel : navigation.nextElementSibling;
+          panel?.animate?.([
+            { opacity: 0, transform: "translateY(4px)" },
+            { opacity: 1, transform: "translateY(0)" }
+          ], { duration: 180, easing: "ease-out" });
+        }
+        context.tabIndicators || (context.tabIndicators = {});
+        context.tabIndicators[key] = position;
+        const end = position.left + position.width;
+        const Observer = doc.defaultView?.ResizeObserver;
+        if (Observer) {
+          const observer = new Observer(() => {
+            const next = { left: active.offsetLeft, width: active.offsetWidth, selected };
+            indicator.style.left = `${next.left}px`;
+            indicator.style.width = `${next.width}px`;
+            context.tabIndicators[key] = next;
+            if (next.left < navigation.scrollLeft) navigation.scrollLeft = next.left;
+            else if (next.left + next.width > navigation.scrollLeft + navigation.clientWidth) {
+              navigation.scrollLeft = next.left + next.width - navigation.clientWidth;
+            }
+          });
+          observer.observe(navigation);
+          observer.observe(active);
+          (context.tabResizeObservers || (context.tabResizeObservers = [])).push(observer);
+        }
+        if (position.left < navigation.scrollLeft) navigation.scrollLeft = position.left;
+        else if (end > navigation.scrollLeft + navigation.clientWidth) navigation.scrollLeft = end - navigation.clientWidth;
       }
       releaseDisplayTarget(containerEl) {
         const context = this.viewContexts.get(containerEl);
@@ -2186,6 +2570,7 @@ var require_settings_tab = __commonJS({
           context.saveTimer = null;
         }
         this.persistViewState(context);
+        for (const observer of context.tabResizeObservers || []) observer.disconnect();
         this.viewContexts.delete(containerEl);
         this.openViews.delete(context);
       }
@@ -2193,6 +2578,7 @@ var require_settings_tab = __commonJS({
         this.captureViewState();
         for (const context of this.openViews) {
           context.containerEl.removeEventListener("scroll", context.scrollHandler);
+          for (const observer of context.tabResizeObservers || []) observer.disconnect();
           if (context.saveTimer) clearTimeout(context.saveTimer);
         }
         this.openViews.clear();
@@ -2481,6 +2867,7 @@ var require_settings_tab = __commonJS({
           tab.setAttribute("id", `cs-${context.viewKey}-integration-${module3.id}`);
           if (module3.id === context.moduleId) tab.addClass("is-active");
           tab.addEventListener("click", () => {
+            context.focusIntegrationTab = index;
             this.setViewState(context, { moduleId: module3.id });
             this.refreshDisplay(context);
           });
@@ -2493,6 +2880,7 @@ var require_settings_tab = __commonJS({
             this.refreshDisplay(context);
           });
         }
+        this.decorateTabs(integrationTabs, tabElements, context, "integration");
         if (context.focusIntegrationTab !== void 0) {
           tabElements[context.focusIntegrationTab]?.focus();
           delete context.focusIntegrationTab;
@@ -2506,6 +2894,7 @@ var require_settings_tab = __commonJS({
         section.createEl("p", {
           text: detected ? "Target detected. Styling applies when a matching view is open." : module3.target.type === "core" ? "Obsidian Core Plugin is not enabled or its API is unavailable." : "Community plugin is not enabled."
         });
+        if (module3.compatibilityNote) section.createEl("p", { cls: "cs-compatibility-note", text: module3.compatibilityNote });
         new Setting(section).setName("Enable customization").setDesc("Turning this off removes this module's styles and observers.").addToggle((toggle) => toggle.setValue(profile.moduleEnabled[module3.id] !== false).onChange((value) => this.runChange(async () => {
           this.plugin.profileManager.setModuleEnabled(module3.id, value);
           await this.persistChange(context);

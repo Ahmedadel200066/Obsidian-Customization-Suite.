@@ -159,7 +159,7 @@ function validateProfile(profile, knownModules, legacyModuleEnabled = {}) {
     }
   }
   for (const module of MODULES) {
-    if (moduleEnabled[module.id] === undefined) moduleEnabled[module.id] = true;
+    if (moduleEnabled[module.id] === undefined) moduleEnabled[module.id] = module.defaultEnabled !== false;
   }
 
   return {

@@ -59,7 +59,11 @@
 .customization-studio-settings .cs-primary-tabs,
 .customization-studio-settings .cs-integration-tabs {
   display: flex;
-  flex-wrap: wrap;
+  position: relative;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--background-modifier-border) transparent;
   gap: 0.4rem;
   border-bottom: 1px solid var(--background-modifier-border);
   margin-bottom: 0.75rem;
@@ -74,6 +78,10 @@
   color: var(--text-muted);
   background: transparent;
   cursor: pointer;
+  flex: 0 0 auto;
+  white-space: nowrap;
+  box-shadow: none;
+  transition: color 150ms ease, background-color 150ms ease;
 }
 
 .customization-studio-settings .cs-primary-tabs button.is-active,
@@ -81,6 +89,7 @@
   border-bottom-color: var(--interactive-accent);
   color: var(--text-normal);
   background: var(--background-modifier-hover);
+  background: color-mix(in srgb, var(--interactive-accent) 12%, transparent);
   font-weight: var(--font-semibold, 600);
 }
 
@@ -185,7 +194,7 @@
 
   .customization-studio-settings .cs-primary-tabs button,
   .customization-studio-settings .cs-integration-tabs button {
-    flex: 1 1 auto;
+    flex: 0 0 auto;
     padding-inline: 0.5rem;
   }
 
@@ -200,4 +209,43 @@
     width: 100%;
     min-width: 0;
   }
+}
+
+.customization-studio-settings .cs-settings-footer {
+  border-top: 1px solid var(--background-modifier-border);
+  margin-top: 1rem;
+  padding: 0.5rem 0;
+  color: var(--text-muted);
+  font-size: var(--font-smaller);
+}
+
+.customization-studio-settings .cs-settings-footer p {
+  margin: 0.25rem 0;
+}
+
+.customization-studio-settings .cs-tab-indicator {
+  position: absolute;
+  bottom: 0;
+  height: 2px;
+  background: var(--interactive-accent);
+  pointer-events: none;
+}
+
+.customization-studio-settings .cs-compatibility-note {
+  color: var(--text-muted);
+  font-size: var(--font-smaller);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .customization-studio-settings .cs-primary-tabs button,
+  .customization-studio-settings .cs-integration-tabs button { transition: none; }
+}
+
+.customization-studio-settings .cs-animated-tabs button.is-active {
+  border-bottom-color: transparent;
+}
+
+.customization-studio-settings .cs-primary-tabs button:focus-visible,
+.customization-studio-settings .cs-integration-tabs button:focus-visible {
+  outline-offset: -3px;
 }

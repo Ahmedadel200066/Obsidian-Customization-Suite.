@@ -37,7 +37,8 @@ class ThemeEngine {
 
   async loadCoreCss() {
     const configDir = this.plugin.app.vault.configDir.replace(/\/+$/, "");
-    const path = `${configDir}/plugins/${this.plugin.manifest.id}/styles/core.css`;
+    const pluginDir = (this.plugin.manifest.dir || `${configDir}/plugins/${this.plugin.manifest.id}`).replace(/\/+$/, "");
+    const path = `${pluginDir}/styles.css`;
     try {
       const css = await this.plugin.app.vault.adapter.read(path);
       this.setStyle("core", css);

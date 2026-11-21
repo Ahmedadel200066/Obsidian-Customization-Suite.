@@ -32,6 +32,7 @@ class FakeElement {
   }
 
   setAttribute(name, value) { this.attributes.set(name, value); }
+  getAttribute(name) { return this.attributes.get(name); }
   addEventListener(name, callback) { this.listeners.set(name, callback); }
   removeEventListener(name) { this.listeners.delete(name); }
   dispatch(name, event = {}) { this.listeners.get(name)?.(event); }
@@ -154,6 +155,11 @@ test("settings UI renders visual controls and previews/persists module edits", a
   };
   const tab = new CustomizationSettingTab({ containerEl: new FakeElement() }, plugin);
   tab.display();
+
+  const footers = findElements(tab.containerEl, (element) => element.tagName === "footer");
+  assert.equal(footers.length, 1);
+  assert.match(footers[0].children[0].textContent, /Support via plugin details/);
+  assert.equal(findElements(footers[0], (element) => element.tagName === "a" || element.tagName === "button").length, 0);
 
   const labels = new Set(FakeSetting.records.map((setting) => setting.name));
   for (const label of [

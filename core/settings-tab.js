@@ -45,12 +45,14 @@ class CustomizationSettingTab extends PluginSettingTab {
       this.openViews.add(context);
     }
 
+    for (const observer of context.tabResizeObservers || []) observer.disconnect();
+    context.tabResizeObservers = [];
     containerEl.empty();
     containerEl.addClass("customization-studio-settings");
     const header = containerEl.createEl("header", { cls: "cs-settings-header" });
     header.createEl("h2", { text: "Customization Studio" });
     header.createEl("p", {
-      text: "Visual profiles for Kanban, Spaced Repetition, and Obsidian Bases. Settings preview immediately and save automatically."
+      text: "Visual profiles for Obsidian and supported plugins. Settings preview immediately and save automatically."
     });
     const activeProfile = this.plugin.profileManager.getActiveProfile();
     const profileHeader = header.createEl("div", {
@@ -119,6 +121,7 @@ class CustomizationSettingTab extends PluginSettingTab {
       tab.setAttribute("id", `cs-${context.viewKey}-tab-${id}`);
       if (context.section === id) tab.addClass("is-active");
       tab.addEventListener("click", () => {
+        context.focusPrimaryTab = tabs.findIndex(([tabId]) => tabId === id);
         this.setViewState(context, { section: id });
         this.refreshDisplay(context);
       });
@@ -134,6 +137,7 @@ class CustomizationSettingTab extends PluginSettingTab {
         this.refreshDisplay(context);
       });
     }
+    this.decorateTabs(navigation, tabElements, context, "primary");
     if (context.focusPrimaryTab !== undefined) {
       tabElements[context.focusPrimaryTab]?.focus();
       delete context.focusPrimaryTab;
@@ -149,7 +153,60 @@ class CustomizationSettingTab extends PluginSettingTab {
       panel.setAttribute("aria-label", "Integrations");
       this.displayModules(panel, context);
     }
+    const footer = containerEl.createEl("footer", { cls: "cs-settings-footer" });
+    footer.createEl("p", {
+      text: "Support via plugin details."
+    });
     containerEl.scrollTop = context.scrollTop;
+  }
+
+  decorateTabs(navigation, tabs, context, key) {
+    const active = tabs.find((tab) => tab.getAttribute("aria-selected") === "true");
+    if (!active?.getBoundingClientRect) return;
+    const doc = navigation.ownerDocument;
+    const selected = active.id;
+    const previous = context.tabIndicators?.[key];
+    const indicator = navigation.createEl("span", {
+      cls: "cs-tab-indicator",
+      attr: { "aria-hidden": "true" }
+    });
+    navigation.addClass("cs-animated-tabs");
+    const position = { left: active.offsetLeft, width: active.offsetWidth, selected };
+    indicator.style.left = `${position.left}px`;
+    indicator.style.width = `${position.width}px`;
+    const reducedMotion = doc.defaultView?.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    if (previous && previous.selected !== selected && !reducedMotion) {
+      indicator.animate?.([
+        { left: `${previous.left}px`, width: `${previous.width}px` },
+        { left: `${position.left}px`, width: `${position.width}px` }
+      ], { duration: 220, easing: "ease-out" });
+      const panel = key === "primary" ? context.panel : navigation.nextElementSibling;
+      panel?.animate?.([
+        { opacity: 0, transform: "translateY(4px)" },
+        { opacity: 1, transform: "translateY(0)" }
+      ], { duration: 180, easing: "ease-out" });
+    }
+    context.tabIndicators ||= {};
+    context.tabIndicators[key] = position;
+    const end = position.left + position.width;
+    const Observer = doc.defaultView?.ResizeObserver;
+    if (Observer) {
+      const observer = new Observer(() => {
+        const next = { left: active.offsetLeft, width: active.offsetWidth, selected };
+        indicator.style.left = `${next.left}px`;
+        indicator.style.width = `${next.width}px`;
+        context.tabIndicators[key] = next;
+        if (next.left < navigation.scrollLeft) navigation.scrollLeft = next.left;
+        else if (next.left + next.width > navigation.scrollLeft + navigation.clientWidth) {
+          navigation.scrollLeft = next.left + next.width - navigation.clientWidth;
+        }
+      });
+      observer.observe(navigation);
+      observer.observe(active);
+      (context.tabResizeObservers ||= []).push(observer);
+    }
+    if (position.left < navigation.scrollLeft) navigation.scrollLeft = position.left;
+    else if (end > navigation.scrollLeft + navigation.clientWidth) navigation.scrollLeft = end - navigation.clientWidth;
   }
 
   releaseDisplayTarget(containerEl) {
@@ -163,6 +220,7 @@ class CustomizationSettingTab extends PluginSettingTab {
       context.saveTimer = null;
     }
     this.persistViewState(context);
+    for (const observer of context.tabResizeObservers || []) observer.disconnect();
     this.viewContexts.delete(containerEl);
     this.openViews.delete(context);
   }
@@ -171,6 +229,7 @@ class CustomizationSettingTab extends PluginSettingTab {
     this.captureViewState();
     for (const context of this.openViews) {
       context.containerEl.removeEventListener("scroll", context.scrollHandler);
+      for (const observer of context.tabResizeObservers || []) observer.disconnect();
       if (context.saveTimer) clearTimeout(context.saveTimer);
     }
     this.openViews.clear();
@@ -529,6 +588,7 @@ class CustomizationSettingTab extends PluginSettingTab {
       tab.setAttribute("id", `cs-${context.viewKey}-integration-${module.id}`);
       if (module.id === context.moduleId) tab.addClass("is-active");
       tab.addEventListener("click", () => {
+        context.focusIntegrationTab = index;
         this.setViewState(context, { moduleId: module.id });
         this.refreshDisplay(context);
       });
@@ -543,6 +603,7 @@ class CustomizationSettingTab extends PluginSettingTab {
         this.refreshDisplay(context);
       });
     }
+    this.decorateTabs(integrationTabs, tabElements, context, "integration");
     if (context.focusIntegrationTab !== undefined) {
       tabElements[context.focusIntegrationTab]?.focus();
       delete context.focusIntegrationTab;
@@ -561,6 +622,8 @@ class CustomizationSettingTab extends PluginSettingTab {
           ? "Obsidian Core Plugin is not enabled or its API is unavailable."
           : "Community plugin is not enabled."
     });
+
+    if (module.compatibilityNote) section.createEl("p", { cls: "cs-compatibility-note", text: module.compatibilityNote });
 
     new Setting(section)
       .setName("Enable customization")

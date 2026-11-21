@@ -1,7 +1,12 @@
 # Customization Studio
 
+![Make your Obsidian workspace feel like yours.](assets/readme-banner.png)
+
+*Interface preview rendered from the plugin UI. Not a live Obsidian screenshot.*
+
 Customization Studio is a non-invasive Obsidian plugin for personalizing the
-appearance of Kanban, Spaced Repetition, and Obsidian Bases. It keeps module
+appearance of Kanban, Spaced Repetition, Obsidian Bases, Tasks, Dataview,
+Calendar, and Day Planner. It keeps module
 logic separate, applies plugin-owned styles, and stores customization profiles
 through Obsidian's plugin data API. It does not edit target plugin sources,
 settings, review schedules, Base definitions, or user content.
@@ -78,7 +83,40 @@ Bases is detected as an Obsidian core plugin. Some requested visual details
 have no verified supported hook and are intentionally not exposed. Requires
 Obsidian 1.9.0 or later.
 
-Only these three integrations are registered in V1.
+### Tasks
+
+Query row spacing and dividers, group headings, date metadata chips, and edit
+form section spacing. Checkbox status, urgency colors, priority, validation,
+and click handlers remain owned by Tasks. Source-inspected at Tasks 8.6.0,
+commit `9fecdd6`; this version of Tasks requires Obsidian 1.13.1.
+
+### Dataview
+
+Standard result-table padding, text size, headers, alternating rows and
+borders, list spacing, and inline-field surfaces. Arbitrary DataviewJS-generated
+HTML is not covered. Source-inspected at Dataview 0.5.68, commit `5ad0994`.
+
+### Calendar
+
+Calendar text size and outer spacing, today/day/heading/dot colors, and an
+optional weekend surface. Uses documented `#calendar-container` variables,
+not generated Svelte class names. Source-inspected at Calendar 1.5.10,
+commit `ef3f269`.
+
+### Day Planner
+
+Timeline background and hour separators, time-block font, corner radius,
+inner content spacing, and shadow. Time positions, duration geometry, event
+colors, native active borders, and drag/resize handlers are not changed.
+Source-inspected at Day Planner 0.35.1, commit `9c483b3`.
+
+The four new integrations are **off by default**, including when older
+profiles load. Duplicate a built-in profile, open **Integrations**, select
+the target, and enable customization. Their colors follow the active theme
+by default; turn off **Follow theme colors** to apply custom colors. All four
+support independent settings, module-scoped CSS, profile import/export, and
+cleanup on disable/unload. These source checks do not certify live-vault
+behavior; the four installed target plugins still need real in-app tests.
 
 ## Installation
 
@@ -91,7 +129,7 @@ Only these three integrations are registered in V1.
    <vault>/.obsidian/plugins/customization-studio/
    ```
 
-3. Confirm `main.js`, `manifest.json`, and `styles/` are directly inside that
+3. Confirm `main.js`, `manifest.json`, and `styles.css` are directly inside that
    directory (not nested in another folder).
 4. In Obsidian, enable **Customization Studio** under Community plugins.
 
@@ -105,7 +143,7 @@ BRAT can install a repository that publishes releases containing the plugin
 files. Install BRAT from Community plugins, then:
 
 1. Open **Settings → BRAT → Add Beta plugin**.
-2. Enter `Ahmedadel200066/Obsidian-Customization-Suite`.
+2. Enter `Ahmedadel200066/Obsidian-Customization-Suite.` (including the final period).
 3. Select the published Customization Studio release and enable it under
    Community plugins.
 
@@ -114,7 +152,7 @@ BRAT and release installation have not been tested in an Obsidian vault.
 ### Manual installation from the repository
 
 The repository root is kept installable: it contains the generated `main.js`,
-`manifest.json`, and runtime `styles/`. Clone/copy the repository contents
+`manifest.json`, and generated `styles.css`. Clone/copy the repository contents
 directly into `<vault>/.obsidian/plugins/customization-studio/`, then enable
 the plugin in Obsidian. Do not copy the repository into an additional nested
 folder.
@@ -131,7 +169,10 @@ npm test
 
 `npm run build` bundles `src/main.js` and local modules into the root-level
 `main.js`. The Obsidian `obsidian` API remains external. The build rejects
-unresolved local imports and validates the root manifest and core stylesheet.
+unresolved local imports and validates the root manifest and generated stylesheet.
+It copies `styles/core.css` to the standard root-level `styles.css`, which is
+the runtime stylesheet distributed with the plugin. Edit the source stylesheet
+and run the build rather than editing the generated copy.
 
 To rebuild on source changes:
 
@@ -141,7 +182,8 @@ npm run dev
 
 The workflow in `.github/workflows/release.yml` runs on published releases,
 installs locked dependencies, builds and tests the project, validates the
-bundle, creates a root-flat install ZIP, and attaches it to the release. The
+bundle, creates a root-flat install ZIP, and attaches `main.js`, `manifest.json`,
+`styles.css`, and the optional ZIP to the release. The
 repository/source archive and installable ZIP are separate artifacts.
 
 ## Compatibility and known limitations
@@ -158,7 +200,7 @@ repository/source archive and installable ZIP are separate artifacts.
 - The documented Bases variables do not provide verified hooks for card
   radius, cover positioning, property visibility, or a specific responsive
   grid selector; those controls are omitted.
-- A missing optional `styles/core.css` produces a warning but does not prevent
+- A missing runtime `styles.css` produces a warning but does not prevent
   startup.
 - The tab bar appearance targets Obsidian's `.workspace-tab-header-container`
   UI class. Zero opacity sets a transparent background without applying
@@ -171,8 +213,9 @@ repository/source archive and installable ZIP are separate artifacts.
 - Profile recommendations are not implemented: the inspected source contains
   no recommendation rules or theme detection, so the UI states that
   suggestions are unavailable rather than inferring a profile.
-- No Buy Me a Coffee URL has been supplied by the owner; no donation link is
-  included. No integration context-menu action is registered because no
+- Support uses the standard manifest `fundingUrl` link. There is no direct
+  donation button in the plugin settings. No integration context-menu action
+  is registered because no
   stable, verified menu hook for the supported plugin views was found.
 - Column blur uses a translucent lane surface (capped at 75% effective opacity
   while blur is active) so the backdrop can be visible; the exact appearance
@@ -184,13 +227,14 @@ repository/source archive and installable ZIP are separate artifacts.
   replaces elements require live testing.
 - Profile-wide custom CSS can affect any matching Obsidian element. Module CSS
   is scoped to its module root and rejects global at-rules such as `@import`.
-- No `LICENSE` file is currently included. All rights remain with their
-  respective owners unless and until the project owner adds a license.
+- Licensed under MIT; see [LICENSE](LICENSE). Upstream plugins remain under
+  their own licenses. This plugin does not bundle their code.
 
 ## Bug reports
 
 Report bugs through the
-[GitHub Issues page](https://github.com/Ahmedadel200066/Obsidian-Customization-Suite/issues).
+[repository](https://github.com/Ahmedadel200066/Obsidian-Customization-Suite.)
+Issues tab.
 Include your Obsidian version, target plugin and version, steps to reproduce,
 expected and actual behavior, and relevant console errors. Do not attach vault
 data, private notes, or credentials.
@@ -208,9 +252,9 @@ Before proposing changes:
 
 Please do not commit secrets, user-vault content, or generated dependency
 directories. Changes to licensing terms require confirmation from the project
-owner.
+owner. See [LICENSE](LICENSE) for the current MIT terms.
 
-See [bug-fix verification](BUGFIX_VERIFICATION.md) for the latest regression checks and remaining in-app checks.
+See [bug-fix verification](BUGFIX_VERIFICATION.md), [growth-change verification](GROWTH_VERIFICATION.md), and [publishing checklist](PUBLISHING.md).
 
 ## Manual Obsidian test checklist
 
@@ -237,8 +281,11 @@ These checks remain necessary before claiming runtime compatibility:
 
 [Ahmed Adel on GitHub](https://github.com/Ahmedadel200066)
 
-No Buy Me a Coffee destination has been added because the project owner has not
-provided an official URL.
+## Support
+
+If Customization Studio helps you, you can
+[support Ahmed on Buy Me a Coffee](https://buymeacoffee.com/medoadel20y).
+The same destination is available through the plugin details support link.
 
 ## Upstream references
 

@@ -102,8 +102,8 @@ async function loadProfileManager(plugin) {
   return { settings, profiles };
 }
 
-test("ships only the three V1 modules with independent settings contracts", () => {
-  assert.deepEqual(MODULES.map((module) => module.id), ["kanban", "spaced-repetition", "bases"]);
+test("ships the seven selected modules with independent settings contracts", () => {
+  assert.deepEqual(MODULES.map((module) => module.id), ["kanban", "spaced-repetition", "bases", "tasks", "dataview", "calendar", "day-planner"]);
   for (const module of MODULES) {
     assert.equal(typeof module.createController, "function");
     assert.equal(typeof module.validateSettings, "function");
@@ -287,6 +287,33 @@ test("profile import rejects invalid module settings and scoped CSS escapes", as
     ":where(.kanban-plugin) .item, :where(.kanban-plugin) .card:hover { color: red; }"
   );
   assert.throws(() => scopeCss("@import url(https://example.com/a.css);", ".kanban-plugin"), /not allowed/);
+});
+
+test("core CSS loads from the standard release asset in the actual installation directory", async () => {
+  const plugin = makePlugin();
+  plugin.manifest.dir = "custom-config/plugins/renamed-folder/";
+  const paths = [];
+  plugin.app.vault.adapter.read = async (path) => {
+    paths.push(path);
+    if (path !== "custom-config/plugins/renamed-folder/styles.css") throw new Error("Unexpected path");
+    return ".customization-studio-settings { color: red; }";
+  };
+  const theme = new ThemeEngine(plugin);
+  assert.equal(await theme.loadCoreCss(), true);
+  assert.deepEqual(paths, ["custom-config/plugins/renamed-folder/styles.css"]);
+  assert.match(theme.styles.get("core").textContent, /customization-studio-settings/);
+  assert.equal(plugin.notices.length, 0);
+  theme.unload();
+});
+
+test("core CSS falls back to the vault config directory if manifest.dir is unavailable", async () => {
+  const plugin = makePlugin();
+  plugin.app.vault.configDir = "vault-config/";
+  plugin.app.vault.adapter.read = async (path) => {
+    assert.equal(path, "vault-config/plugins/customization-studio/styles.css");
+    return ".customization-studio-settings { color: blue; }";
+  };
+  assert.equal(await new ThemeEngine(plugin).loadCoreCss(), true);
 });
 
 test("missing core CSS warns but does not prevent plugin stylesheet setup", async () => {
@@ -786,4 +813,78 @@ test("window lifecycle discovers new documents and discards closed-window styles
   assert.equal(theme.documentEngines.has(popout), false);
   manager.unload();
   theme.unload();
+});
+
+
+test("new integrations are opt-in and persist independent settings without breaking old profiles", async () => {
+  const plugin = makePlugin();
+  const { settings, profiles } = await loadProfileManager(plugin);
+  for (const id of ["tasks", "dataview", "calendar", "day-planner"]) {
+    assert.equal(profiles.getActiveProfile().moduleEnabled[id], false);
+  }
+  profiles.createCustomProfile("Growth");
+  profiles.setModuleEnabled("calendar", true);
+  profiles.updateModuleSettings("calendar", { fontSize: 17, todayColor: "#abcdef" });
+  profiles.setModuleEnabled("day-planner", true);
+  profiles.updateModuleSettings("day-planner", { blockRadius: 12 });
+  await settings.save();
+  const restarted = (await loadProfileManager(plugin)).profiles.getActiveProfile();
+  assert.equal(restarted.moduleEnabled.calendar, true);
+  assert.equal(restarted.modules.calendar.fontSize, 17);
+  assert.equal(restarted.modules.calendar.todayColor, "#abcdef");
+  assert.equal(restarted.modules["day-planner"].blockRadius, 12);
+  assert.equal(restarted.moduleEnabled.tasks, false);
+});
+
+for (const id of ["calendar", "dataview", "tasks", "day-planner"]) {
+  test(`${id} styles only detected roots, supports popouts, and cleans up on disable`, async () => {
+    const module = MODULES.find((entry) => entry.id === id);
+    const plugin = makePlugin();
+    const { profiles } = await loadProfileManager(plugin);
+    plugin.profileManager = profiles;
+    profiles.createCustomProfile(`${id} lifecycle`);
+    profiles.setModuleEnabled(id, true);
+    const second = makeDocument();
+    const firstRoot = new FakeElement(plugin.document);
+    const secondRoot = new FakeElement(second);
+    plugin.document.body.selectors[module.rootSelector] = [firstRoot];
+    second.body.selectors[module.rootSelector] = [secondRoot];
+    const manager = {
+      getDocuments: () => new Set([plugin.document, second]),
+      isTargetPluginEnabled: () => true
+    };
+    const controller = module.createController(plugin, manager, module);
+    controller.start();
+    assert.equal(controller.roots.size, 2);
+    assert.equal(controller.styles.size, 2);
+    assert.ok(controller.style.textContent.trim());
+    assert.equal(controller.style.dataset.customizationStudioModule, id);
+    const observers = [...controller.roots.values()];
+    profiles.setModuleEnabled(id, false);
+    controller.refresh(profiles.getActiveProfile());
+    assert.equal(controller.roots.size, 0);
+    assert.equal(controller.styles.size, 0);
+    assert.ok(observers.every((observer) => observer.disconnected));
+    controller.unload();
+  });
+
+  test(`${id} validates range/color/scoped CSS and follows the theme by default`, () => {
+    const module = MODULES.find((entry) => entry.id === id);
+    const range = Object.keys(module.settingsSchema).find((key) => module.settingsSchema[key].type === "range");
+    const color = Object.keys(module.settingsSchema).find((key) => module.settingsSchema[key].type === "color");
+    assert.throws(() => module.validateSettings({ [range]: -999 }), /must be between/);
+    assert.throws(() => module.validateSettings({ [color]: "red; body {}" }), /six-digit hex/);
+    assert.throws(() => module.validateSettings({ customCss: "@import url(https://example.invalid);" }), /not allowed/);
+    const value = module.validateSettings({ customCss: ".item { color: red; }" });
+    assert.ok(module.customCss(value).startsWith(`:where(${module.rootSelector})`));
+    assert.match(module.styles(module.defaultSettings), /var\(--/);
+    assert.doesNotMatch(module.styles(module.defaultSettings), /!important|pointer-events|display:\s*none/);
+  });
+}
+
+test("Day Planner styling does not override time geometry, event colors, or active borders", () => {
+  const module = MODULES.find((entry) => entry.id === "day-planner");
+  const css = module.styles(module.defaultSettings);
+  assert.doesNotMatch(css, /--time-block-(?:height|top|left|width|position|bg-color|border-color-override)\s*:/);
+  assert.match(css, /--time-block-border-radius: 6px/);
 });

@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises";
+import { readFile, copyFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import esbuild from "esbuild";
@@ -30,7 +30,7 @@ async function validatePluginBundle() {
   if (manifest.name !== "Customization Studio" || manifest.id !== "customization-studio") {
     throw new Error("Plugin name or ID changed unexpectedly in the root manifest.");
   }
-  await readFile(path.join(root, "styles/core.css"), "utf8");
+  await readFile(path.join(root, "styles.css"), "utf8");
 }
 
 const buildContext = await esbuild.context({
@@ -42,12 +42,21 @@ const buildContext = await esbuild.context({
   format: "cjs",
   target: "es2020",
   external: ["obsidian"],
+  banner: { js: `/*\n${(await readFile(path.join(root, "LICENSE"), "utf8")).trim()}\n*/` },
   plugins: [{
     name: "package-plugin",
     setup(build) {
+      build.onLoad({ filter: /[\\/]src[\\/]main\.js$/ }, async (args) => ({
+        contents: await readFile(args.path, "utf8"),
+        loader: "js",
+        resolveDir: path.dirname(args.path),
+        watchFiles: [path.join(root, "styles/core.css")]
+      }));
       build.onEnd(async (result) => {
         if (result.errors.length) return;
         try {
+          // Obsidian installs root-level release assets, not nested ZIP files.
+          await copyFile(path.join(root, "styles/core.css"), path.join(root, "styles.css"));
           await validatePluginBundle();
           console.log(`Built installable plugin bundle at ${path.relative(root, outputFile)}.`);
         } catch (error) {
