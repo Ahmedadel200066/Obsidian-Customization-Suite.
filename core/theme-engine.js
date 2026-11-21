@@ -25,10 +25,12 @@ function tabBarGradient(variables) {
 }
 
 class ThemeEngine {
-  constructor(plugin) {
+  constructor(plugin, body = null) {
     this.plugin = plugin;
     this.styles = new Map();
-    this.body = plugin.app.workspace.containerEl.ownerDocument.body;
+    this.body = body || plugin.app.workspace.containerEl.ownerDocument.body;
+    this.isSecondaryDocument = Boolean(body);
+    this.documentEngines = new Map();
     this.previousClassState = null;
     this.previousProfile = null;
   }
@@ -56,10 +58,30 @@ class ThemeEngine {
       this.body.ownerDocument.head.appendChild(style);
       this.styles.set(id, style);
     }
-    style.textContent = css;
+    if (style.textContent !== css) style.textContent = css;
   }
 
   apply(profile) {
+    if (!this.isSecondaryDocument) {
+      const documents = this.plugin.moduleManager?.getDocuments?.() || new Set([this.body.ownerDocument]);
+      for (const [doc, engine] of this.documentEngines) {
+        if (!documents.has(doc)) {
+          engine.unload();
+          this.documentEngines.delete(doc);
+        }
+      }
+      for (const doc of documents) {
+        if (doc === this.body.ownerDocument) continue;
+        let engine = this.documentEngines.get(doc);
+        if (!engine) {
+          engine = new ThemeEngine(this.plugin, doc.body);
+          const coreCss = this.styles.get("core")?.textContent;
+          if (coreCss) engine.setStyle("core", coreCss);
+          this.documentEngines.set(doc, engine);
+        }
+        engine.apply(profile);
+      }
+    }
     if (this.previousClassState === null) {
       this.previousClassState = this.body.classList.contains("customization-studio-enabled");
     }
@@ -93,6 +115,8 @@ class ThemeEngine {
   }
 
   unload() {
+    for (const engine of this.documentEngines.values()) engine.unload();
+    this.documentEngines.clear();
     if (this.previousClassState === false) {
       this.body.classList.remove("customization-studio-enabled");
     }

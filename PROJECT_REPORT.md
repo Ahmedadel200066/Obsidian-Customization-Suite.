@@ -94,7 +94,9 @@ vault; live compatibility is not certified.
 - Settings writes are debounced and flushed during unload; errors are
   surfaced in the console and through Obsidian notices.
 - Module lifecycle cleanup removes owned styles/observers and avoids deleting
-  third-party DOM or style nodes.
+  third-party DOM or style nodes. Styles are tracked per document, including
+  popouts; late-mounted review dialogs and drag portals are discovered without
+  requiring a workspace layout event.
 - Kanban background inputs reject unsafe schemes and paths outside the vault.
 - The ribbon shortcut uses a plugin-owned modal rather than Obsidian's
   undocumented settings-navigation API.
@@ -143,7 +145,7 @@ npm test
 rebuilds it in watch mode. The bundle check rejects unresolved local imports
 and validates the manifest and core stylesheet.
 
-Latest validation: `npm ci`, `npm run build`, `npm test` (25 tests), and
+Latest validation: `npm ci --ignore-scripts`, `npm run build`, `npm test` (31 tests), and
 `git diff --check` passed. These checks use automated tests and do not replace
 testing in Obsidian.
 

@@ -275,6 +275,7 @@ class CustomizationSettingTab extends PluginSettingTab {
       .setDesc("Create a profile by copying the active profile.")
       .addText((text) => {
         text.setPlaceholder("Profile name").setValue(this.newProfileName);
+        text.inputEl.maxLength = 100;
         text.onChange((value) => { this.newProfileName = value; });
       })
       .addButton((button) => button
@@ -303,10 +304,12 @@ class CustomizationSettingTab extends PluginSettingTab {
 
       new Setting(section)
         .setName("Rename profile")
-        .addText((text) => text
-          .setPlaceholder(active.name)
-          .setValue(this.renameValue || active.name)
-          .onChange((value) => { this.renameValue = value; }))
+        .addText((text) => {
+          text.inputEl.maxLength = 100;
+          text.setPlaceholder(active.name)
+            .setValue(this.renameValue || active.name)
+            .onChange((value) => { this.renameValue = value; });
+        })
         .addButton((button) => button
           .setButtonText("Rename")
           .onClick(() => this.runChange(async () => {
@@ -651,17 +654,18 @@ class CustomizationSettingTab extends PluginSettingTab {
     });
     for (const name of names) {
       const colors = profile.modules[module.id].columnColors;
+      const currentColors = () => this.plugin.profileManager.getActiveProfile().modules[module.id].columnColors;
       new Setting(containerEl)
         .setName(name)
         .addColorPicker((picker) => picker
           .setValue(colors[name] || this.plugin.profileManager.getActiveProfile().variables.accentColor || "#7c6ce7")
           .onChange((value) => this.updateModule(module.id, {
-            columnColors: { ...colors, [name]: value }
+            columnColors: { ...currentColors(), [name]: value }
           }, context)))
         .addButton((button) => button
           .setButtonText("Clear")
           .onClick(() => {
-            const next = { ...colors };
+            const next = { ...currentColors() };
             delete next[name];
             this.updateModule(module.id, { columnColors: next }, context);
           }));

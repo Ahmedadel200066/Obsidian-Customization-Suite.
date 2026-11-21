@@ -666,3 +666,124 @@ test("Bases module is disabled cleanly when its core plugin is not enabled", () 
   controller.refresh(profile);
   assert.equal(controller.style, null);
 });
+
+test("renaming rejects overlong names before they can break restart", async () => {
+  const plugin = makePlugin();
+  const { settings, profiles } = await loadProfileManager(plugin);
+  const profile = profiles.createCustomProfile("Valid name");
+  assert.throws(() => profiles.renameCustomProfile(profile.id, "x".repeat(101)), /100 characters/);
+  assert.equal(profiles.getActiveProfile().name, "Valid name");
+  profiles.renameCustomProfile(profile.id, "x".repeat(100));
+  await settings.save();
+  const restarted = await loadProfileManager(plugin);
+  assert.equal(restarted.profiles.getActiveProfile().name.length, 100);
+});
+
+test("discovers review modals outside the workspace without a layout event", async () => {
+  const plugin = makePlugin();
+  const { profiles } = await loadProfileManager(plugin);
+  plugin.profileManager = profiles;
+  plugin.app.plugins.enabledPlugins.add("obsidian-spaced-repetition");
+  const manager = new ModuleManager(plugin);
+  plugin.moduleManager = manager;
+  manager.load();
+  const controller = manager.controllers.get("spaced-repetition");
+  assert.equal(controller.style, null);
+  const modal = new FakeElement(plugin.document);
+  modal.nodeType = 1;
+  modal.matches = (selector) => selector.includes(".sr-card-container");
+  plugin.document.body.selectors[spacedRepetition.rootSelector] = [modal];
+  manager.documents.get(plugin.document).callback([{ addedNodes: [modal], removedNodes: [] }]);
+  await new Promise((resolve) => setTimeout(resolve, 60));
+  assert.equal(controller.roots.has(modal), true);
+  assert.ok(controller.style?.parentNode);
+  plugin.document.body.selectors[spacedRepetition.rootSelector] = [];
+  manager.documents.get(plugin.document).callback([{ addedNodes: [], removedNodes: [modal] }]);
+  await new Promise((resolve) => setTimeout(resolve, 60));
+  assert.equal(controller.style, null);
+  const observer = manager.documents.get(plugin.document);
+  manager.unload();
+  assert.equal(observer.disconnected, true);
+});
+
+test("styles isolated Kanban and Bases popouts and removes all document effects", async () => {
+  const plugin = makePlugin();
+  const { profiles } = await loadProfileManager(plugin);
+  profiles.createCustomProfile("Popout");
+  plugin.profileManager = profiles;
+  plugin.app.plugins.enabledPlugins.add("obsidian-kanban");
+  plugin.app.internalPlugins.getEnabledPluginById = () => ({ enabled: true });
+  const popout = makeDocument();
+  plugin.app.workspace.iterateAllLeaves = (callback) => callback({ view: { containerEl: popout.body } });
+  const board = new FakeElement(popout);
+  const base = new FakeElement(popout);
+  popout.body.selectors[kanban.rootSelector] = [board];
+  popout.body.selectors[bases.rootSelector] = [base];
+  const manager = new ModuleManager(plugin);
+  plugin.moduleManager = manager;
+  const theme = new ThemeEngine(plugin);
+  plugin.themeEngine = theme;
+  manager.load();
+  manager.refreshWithNotice();
+  const kanbanController = manager.controllers.get("kanban");
+  const basesController = manager.controllers.get("bases");
+  assert.ok(kanbanController.styles.get(popout)?.parentNode);
+  assert.ok(basesController.styles.get(popout)?.parentNode);
+  assert.equal(kanbanController.styles.has(plugin.document), false);
+  assert.equal(popout.body.dataset.customizationStudioProfile, profiles.getActiveProfile().id);
+  const oldStyle = basesController.styles.get(popout);
+  profiles.updateModuleSettings("bases", { cardsScale: 1.4 });
+  manager.refreshWithNotice();
+  assert.match(oldStyle.textContent, /--bases-cards-scale: 1\.4/);
+  profiles.setModuleEnabled("bases", false);
+  manager.refresh();
+  assert.equal(oldStyle.parentNode, null);
+  assert.equal(basesController.styles.size, 0);
+  manager.unload();
+  theme.unload();
+  assert.equal(popout.head.children.length, 0);
+  assert.equal(plugin.document.head.children.length, 0);
+  assert.equal(popout.body.dataset.customizationStudioProfile, undefined);
+});
+
+test("Kanban portal styles cover dragged cards outside the board root", () => {
+  const css = kanban.styles(kanban.defaultSettings, {
+    resolvedBackgroundImage: "", columnColorTokens: new Map()
+  });
+  assert.match(kanban.rootSelector, /kanban-plugin__drag-container/);
+  assert.match(css, /:is\(\.kanban-plugin, \.kanban-plugin__drag-container\) \.kanban-plugin__item/);
+  assert.match(css, /\n\.kanban-plugin__drag-container > \.kanban-plugin__item-wrapper/);
+  assert.doesNotMatch(css, /\.kanban-plugin \.kanban-plugin__drag-container/);
+});
+
+test("window lifecycle discovers new documents and discards closed-window styles", async () => {
+  const plugin = makePlugin();
+  const { profiles } = await loadProfileManager(plugin);
+  plugin.profileManager = profiles;
+  plugin.app.plugins.enabledPlugins.add("obsidian-kanban");
+  const events = new Map();
+  plugin.app.workspace.on = (name, callback) => { events.set(name, callback); return {}; };
+  const manager = new ModuleManager(plugin);
+  plugin.moduleManager = manager;
+  const theme = new ThemeEngine(plugin);
+  plugin.themeEngine = theme;
+  manager.load();
+  const popout = makeDocument();
+  const board = new FakeElement(popout);
+  popout.body.selectors[kanban.rootSelector] = [board];
+  events.get("window-open")({ doc: popout });
+  const controller = manager.controllers.get("kanban");
+  const style = controller.styles.get(popout);
+  const observer = manager.documents.get(popout);
+  assert.ok(style?.parentNode);
+  assert.ok(theme.documentEngines.has(popout));
+  // The leaf list may still include the window while its close event is delivered.
+  plugin.app.workspace.iterateAllLeaves = (callback) => callback({ view: { containerEl: popout.body } });
+  events.get("window-close")({ doc: popout });
+  assert.equal(style.parentNode, null);
+  assert.equal(observer.disconnected, true);
+  assert.equal(controller.styles.has(popout), false);
+  assert.equal(theme.documentEngines.has(popout), false);
+  manager.unload();
+  theme.unload();
+});

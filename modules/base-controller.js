@@ -5,6 +5,7 @@ class BaseModuleController {
     this.module = module;
     this.roots = new Map();
     this.style = null;
+    this.styles = new Map();
     this.profile = null;
     this.settings = module.validateSettings();
     this.pendingApply = null;
@@ -24,7 +25,13 @@ class BaseModuleController {
     }
 
     const container = this.plugin.app.workspace.containerEl;
-    const roots = new Set(container.querySelectorAll(this.module.rootSelector));
+    const documents = this.manager.getDocuments?.() || new Set([container.ownerDocument]);
+    const roots = new Set();
+    for (const doc of documents) {
+      for (const root of doc.body.querySelectorAll(this.module.rootSelector)) roots.add(root);
+    }
+    // The workspace may be a detached container during startup (and in host tests).
+    for (const root of container.querySelectorAll(this.module.rootSelector)) roots.add(root);
     for (const [root, observer] of this.roots) {
       if (!roots.has(root)) {
         observer?.disconnect();
@@ -66,14 +73,27 @@ class BaseModuleController {
   }
 
   updateStyle() {
-    if (!this.style) {
-      const doc = this.plugin.app.workspace.containerEl.ownerDocument;
-      this.style = doc.createElement("style");
-      this.style.dataset.customizationStudioModule = this.module.id;
-      this.style.dataset.customizationStudioOwner = this.plugin.manifest.id;
-      doc.head.appendChild(this.style);
+    const documents = new Set([...this.roots.keys()].map((root) => root.ownerDocument));
+    for (const [doc, style] of this.styles) {
+      if (!documents.has(doc)) {
+        style.remove();
+        this.styles.delete(doc);
+      }
     }
-    this.style.textContent = `${this.module.styles(this.settings, this)}\n${this.module.customCss(this.settings, this)}`;
+    const css = `${this.module.styles(this.settings, this)}\n${this.module.customCss(this.settings, this)}`;
+    for (const doc of documents) {
+      let style = this.styles.get(doc);
+      if (!style?.parentNode) {
+        style = doc.createElement("style");
+        style.dataset.customizationStudioModule = this.module.id;
+        style.dataset.customizationStudioOwner = this.plugin.manifest.id;
+        doc.head.appendChild(style);
+        this.styles.set(doc, style);
+      }
+      if (style.textContent !== css) style.textContent = css;
+    }
+    this.style = this.styles.get(this.plugin.app.workspace.containerEl.ownerDocument)
+      || this.styles.values().next().value || null;
   }
 
   onRootsUpdated() {}
@@ -83,7 +103,8 @@ class BaseModuleController {
   onRootRemoved() {}
 
   removeStyle() {
-    if (this.style?.parentNode) this.style.remove();
+    for (const style of this.styles.values()) if (style.parentNode) style.remove();
+    this.styles.clear();
     this.style = null;
   }
 

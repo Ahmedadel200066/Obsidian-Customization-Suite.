@@ -283,3 +283,40 @@ test("settings UI renders visual controls and previews/persists module edits", a
   tab.dispose();
   tab.releaseDisplayTarget(tab.containerEl);
 });
+
+test("successive column color edits and Clear retain other unsaved-view edits", async () => {
+  const originalLoad = Module._load;
+  Module._load = function(request, parent, isMain) {
+    if (request === "obsidian") return {
+      PluginSettingTab: class {}, Setting: FakeSetting, Notice: class {}
+    };
+    return originalLoad.call(this, request, parent, isMain);
+  };
+  let CustomizationSettingTab;
+  try { ({ CustomizationSettingTab } = require("../core/settings-tab")); }
+  finally { Module._load = originalLoad; }
+  const settings = new SettingsManager({ loadData: async () => null, saveData: async () => {} });
+  await settings.load();
+  const profiles = new ProfileManager(settings);
+  profiles.load();
+  profiles.createCustomProfile("Column edit regression");
+  const plugin = {
+    profileManager: profiles,
+    moduleManager: { getDetectedColumns: () => ["Todo", "Done"] },
+    settingsManager: { scheduleSave: async () => {} },
+    applyCustomization() {}
+  };
+  FakeSetting.actions = [];
+  const tab = new CustomizationSettingTab({ containerEl: new FakeElement() }, plugin);
+  tab.displayColumnOverrides(new FakeElement(), require("../modules/kanban"), profiles.getActiveProfile(), null);
+  const todoColor = FakeSetting.actions.find((action) => action.name === "Todo" && action.component.change);
+  const doneColor = FakeSetting.actions.find((action) => action.name === "Done" && action.component.change);
+  const todoClear = FakeSetting.actions.find((action) => action.name === "Todo" && action.component.click);
+  await todoColor.run("#112233");
+  await doneColor.run("#abcdef");
+  assert.deepEqual(profiles.getActiveProfile().modules.kanban.columnColors, {
+    Todo: "#112233", Done: "#abcdef"
+  });
+  await todoClear.run();
+  assert.deepEqual(profiles.getActiveProfile().modules.kanban.columnColors, { Done: "#abcdef" });
+});
