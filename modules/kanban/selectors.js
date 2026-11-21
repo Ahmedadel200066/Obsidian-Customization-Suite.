@@ -1,5 +1,5 @@
 module.exports = {
-  root: ".kanban-plugin",
+  root: ".kanban-plugin, .kanban-plugin__drag-container",
   board: ".kanban-plugin__board",
   laneWrapper: ".kanban-plugin__lane-wrapper",
   lane: ".kanban-plugin__lane",

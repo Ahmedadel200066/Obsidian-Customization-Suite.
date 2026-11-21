@@ -210,6 +210,8 @@ Please do not commit secrets, user-vault content, or generated dependency
 directories. Changes to licensing terms require confirmation from the project
 owner.
 
+See [bug-fix verification](BUGFIX_VERIFICATION.md) for the latest regression checks and remaining in-app checks.
+
 ## Manual Obsidian test checklist
 
 These checks remain necessary before claiming runtime compatibility:

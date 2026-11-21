@@ -182,13 +182,13 @@ function styles(settings, controller) {
     ? "var(--shadow-l, 0 8px 24px rgba(0, 0, 0, 0.25))"
     : "";
   const cardGlowSelector = settings.cardGlowMode === "always"
-    ? ".kanban-plugin .kanban-plugin__item"
-    : ".kanban-plugin .kanban-plugin__lane-items .kanban-plugin__item:hover";
+    ? ":is(.kanban-plugin, .kanban-plugin__drag-container) .kanban-plugin__item"
+    : ":is(.kanban-plugin, .kanban-plugin__drag-container) .kanban-plugin__lane-items .kanban-plugin__item:hover";
   const columnGlowSelector = settings.columnGlowMode === "always"
-    ? ".kanban-plugin .kanban-plugin__lane"
-    : ".kanban-plugin .kanban-plugin__lane:hover";
+    ? ":is(.kanban-plugin, .kanban-plugin__drag-container) .kanban-plugin__lane"
+    : ":is(.kanban-plugin, .kanban-plugin__drag-container) .kanban-plugin__lane:hover";
   const columnColors = [...controller.columnColorTokens.entries()].map(([token, color]) => `
-.kanban-plugin .kanban-plugin__lane-wrapper[data-cs-kanban-column="${token}"] .kanban-plugin__lane {
+:is(.kanban-plugin, .kanban-plugin__drag-container) .kanban-plugin__lane-wrapper[data-cs-kanban-column="${token}"] .kanban-plugin__lane {
   background-color: ${rgba(color, settings.columnBlur ? Math.min(settings.columnOpacity / 100, 0.75) : settings.columnOpacity / 100)};
 }`).join("\n");
   return `
@@ -198,12 +198,14 @@ function styles(settings, controller) {
   background-size: ${settings.backgroundSize};
   background-position: ${settings.backgroundPosition};
   background-repeat: no-repeat;
+}
+:is(.kanban-plugin, .kanban-plugin__drag-container) {
   --cs-kanban-card-background: ${rgba(settings.cardBackground, settings.cardOpacity / 100)};
 }
-.kanban-plugin .kanban-plugin__lane-wrapper {
+:is(.kanban-plugin, .kanban-plugin__drag-container) .kanban-plugin__lane-wrapper {
   margin-inline-end: ${settings.columnSpacing}px;
 }
-.kanban-plugin .kanban-plugin__lane {
+:is(.kanban-plugin, .kanban-plugin__drag-container) .kanban-plugin__lane {
   background-color: ${rgba(settings.columnBackground, settings.columnBlur ? Math.min(settings.columnOpacity / 100, 0.75) : settings.columnOpacity / 100)};
   border-radius: ${settings.columnRadius}px;
   padding: ${settings.columnPadding}px;
@@ -211,37 +213,37 @@ function styles(settings, controller) {
   -webkit-backdrop-filter: ${settings.columnBlur ? `blur(${settings.columnBlur}px)` : "none"};
   transition: background-color 180ms ease, box-shadow 180ms ease, outline-color 180ms ease;
 }
-.kanban-plugin .kanban-plugin__lane-items {
+:is(.kanban-plugin, .kanban-plugin__drag-container) .kanban-plugin__lane-items {
   gap: ${settings.cardSpacing}px;
 }
-.kanban-plugin .kanban-plugin__lane-items > div {
+:is(.kanban-plugin, .kanban-plugin__drag-container) .kanban-plugin__lane-items > div {
   margin-block-start: 0;
 }
-.kanban-plugin .kanban-plugin__item,
-.kanban-plugin .kanban-plugin__item-content-wrapper,
-.kanban-plugin .kanban-plugin__item-title-wrapper {
+:is(.kanban-plugin, .kanban-plugin__drag-container) .kanban-plugin__item,
+:is(.kanban-plugin, .kanban-plugin__drag-container) .kanban-plugin__item-content-wrapper,
+:is(.kanban-plugin, .kanban-plugin__drag-container) .kanban-plugin__item-title-wrapper {
   background-color: var(--cs-kanban-card-background);
 }
-.kanban-plugin .kanban-plugin__item {
+:is(.kanban-plugin, .kanban-plugin__drag-container) .kanban-plugin__item {
   border-radius: ${settings.cardRadius}px;
   padding: ${settings.cardPadding}px;
   transition: box-shadow 180ms ease, opacity 180ms ease, outline-color 180ms ease;
 }
-.kanban-plugin .kanban-plugin__lane-items .kanban-plugin__item:hover {
+:is(.kanban-plugin, .kanban-plugin__drag-container) .kanban-plugin__lane-items .kanban-plugin__item:hover {
   ${hoverShadows ? `box-shadow: ${hoverShadows};` : ""}
 }
 ${settings.hoverGlow ? `${cardGlowSelector} { box-shadow: ${cardGlow}; }` : ""}
 ${settings.columnGlowEnabled ? `${columnGlowSelector} { box-shadow: ${columnGlow}; }` : ""}
-.kanban-plugin .kanban-plugin__drag-container > .kanban-plugin__item-wrapper .kanban-plugin__item {
+.kanban-plugin__drag-container > .kanban-plugin__item-wrapper .kanban-plugin__item {
   ${dragStyles[settings.dragStyle]}
 }
-.kanban-plugin .is-dropping > .kanban-plugin__lane {
+:is(.kanban-plugin, .kanban-plugin__drag-container) .is-dropping > .kanban-plugin__lane {
   ${settings.dragStyle === "outline" ? "outline: 2px solid var(--interactive-accent); outline-offset: 2px;" : ""}
   ${settings.dragStyle === "glow" ? "box-shadow: 0 0 18px var(--interactive-accent);" : ""}
 }
 @media (prefers-reduced-motion: reduce) {
-  .kanban-plugin .kanban-plugin__item,
-  .kanban-plugin .kanban-plugin__lane {
+  :is(.kanban-plugin, .kanban-plugin__drag-container) .kanban-plugin__item,
+  :is(.kanban-plugin, .kanban-plugin__drag-container) .kanban-plugin__lane {
     transition-duration: 0ms !important;
   }
 }

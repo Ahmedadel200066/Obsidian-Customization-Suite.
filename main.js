@@ -386,6 +386,7 @@ var require_base_controller = __commonJS({
         this.module = module3;
         this.roots = /* @__PURE__ */ new Map();
         this.style = null;
+        this.styles = /* @__PURE__ */ new Map();
         this.profile = null;
         this.settings = module3.validateSettings();
         this.pendingApply = null;
@@ -401,7 +402,12 @@ var require_base_controller = __commonJS({
           return;
         }
         const container = this.plugin.app.workspace.containerEl;
-        const roots = new Set(container.querySelectorAll(this.module.rootSelector));
+        const documents = this.manager.getDocuments?.() || /* @__PURE__ */ new Set([container.ownerDocument]);
+        const roots = /* @__PURE__ */ new Set();
+        for (const doc of documents) {
+          for (const root of doc.body.querySelectorAll(this.module.rootSelector)) roots.add(root);
+        }
+        for (const root of container.querySelectorAll(this.module.rootSelector)) roots.add(root);
         for (const [root, observer] of this.roots) {
           if (!roots.has(root)) {
             observer?.disconnect();
@@ -439,15 +445,27 @@ var require_base_controller = __commonJS({
         }, 40);
       }
       updateStyle() {
-        if (!this.style) {
-          const doc = this.plugin.app.workspace.containerEl.ownerDocument;
-          this.style = doc.createElement("style");
-          this.style.dataset.customizationStudioModule = this.module.id;
-          this.style.dataset.customizationStudioOwner = this.plugin.manifest.id;
-          doc.head.appendChild(this.style);
+        const documents = new Set([...this.roots.keys()].map((root) => root.ownerDocument));
+        for (const [doc, style] of this.styles) {
+          if (!documents.has(doc)) {
+            style.remove();
+            this.styles.delete(doc);
+          }
         }
-        this.style.textContent = `${this.module.styles(this.settings, this)}
+        const css = `${this.module.styles(this.settings, this)}
 ${this.module.customCss(this.settings, this)}`;
+        for (const doc of documents) {
+          let style = this.styles.get(doc);
+          if (!style?.parentNode) {
+            style = doc.createElement("style");
+            style.dataset.customizationStudioModule = this.module.id;
+            style.dataset.customizationStudioOwner = this.plugin.manifest.id;
+            doc.head.appendChild(style);
+            this.styles.set(doc, style);
+          }
+          if (style.textContent !== css) style.textContent = css;
+        }
+        this.style = this.styles.get(this.plugin.app.workspace.containerEl.ownerDocument) || this.styles.values().next().value || null;
       }
       onRootsUpdated() {
       }
@@ -456,7 +474,8 @@ ${this.module.customCss(this.settings, this)}`;
       onRootRemoved() {
       }
       removeStyle() {
-        if (this.style?.parentNode) this.style.remove();
+        for (const style of this.styles.values()) if (style.parentNode) style.remove();
+        this.styles.clear();
         this.style = null;
       }
       deactivate() {
@@ -483,7 +502,7 @@ ${this.module.customCss(this.settings, this)}`;
 var require_selectors = __commonJS({
   "modules/kanban/selectors.js"(exports2, module2) {
     module2.exports = {
-      root: ".kanban-plugin",
+      root: ".kanban-plugin, .kanban-plugin__drag-container",
       board: ".kanban-plugin__board",
       laneWrapper: ".kanban-plugin__lane-wrapper",
       lane: ".kanban-plugin__lane",
@@ -660,10 +679,10 @@ var require_controller = __commonJS({
         smooth: "transition: box-shadow 180ms ease, opacity 180ms ease;"
       };
       const hoverShadows = settings.hoverLift ? "var(--shadow-l, 0 8px 24px rgba(0, 0, 0, 0.25))" : "";
-      const cardGlowSelector = settings.cardGlowMode === "always" ? ".kanban-plugin .kanban-plugin__item" : ".kanban-plugin .kanban-plugin__lane-items .kanban-plugin__item:hover";
-      const columnGlowSelector = settings.columnGlowMode === "always" ? ".kanban-plugin .kanban-plugin__lane" : ".kanban-plugin .kanban-plugin__lane:hover";
+      const cardGlowSelector = settings.cardGlowMode === "always" ? ":is(.kanban-plugin, .kanban-plugin__drag-container) .kanban-plugin__item" : ":is(.kanban-plugin, .kanban-plugin__drag-container) .kanban-plugin__lane-items .kanban-plugin__item:hover";
+      const columnGlowSelector = settings.columnGlowMode === "always" ? ":is(.kanban-plugin, .kanban-plugin__drag-container) .kanban-plugin__lane" : ":is(.kanban-plugin, .kanban-plugin__drag-container) .kanban-plugin__lane:hover";
       const columnColors = [...controller.columnColorTokens.entries()].map(([token, color]) => `
-.kanban-plugin .kanban-plugin__lane-wrapper[data-cs-kanban-column="${token}"] .kanban-plugin__lane {
+:is(.kanban-plugin, .kanban-plugin__drag-container) .kanban-plugin__lane-wrapper[data-cs-kanban-column="${token}"] .kanban-plugin__lane {
   background-color: ${rgba(color, settings.columnBlur ? Math.min(settings.columnOpacity / 100, 0.75) : settings.columnOpacity / 100)};
 }`).join("\n");
       return `
@@ -673,12 +692,14 @@ var require_controller = __commonJS({
   background-size: ${settings.backgroundSize};
   background-position: ${settings.backgroundPosition};
   background-repeat: no-repeat;
+}
+:is(.kanban-plugin, .kanban-plugin__drag-container) {
   --cs-kanban-card-background: ${rgba(settings.cardBackground, settings.cardOpacity / 100)};
 }
-.kanban-plugin .kanban-plugin__lane-wrapper {
+:is(.kanban-plugin, .kanban-plugin__drag-container) .kanban-plugin__lane-wrapper {
   margin-inline-end: ${settings.columnSpacing}px;
 }
-.kanban-plugin .kanban-plugin__lane {
+:is(.kanban-plugin, .kanban-plugin__drag-container) .kanban-plugin__lane {
   background-color: ${rgba(settings.columnBackground, settings.columnBlur ? Math.min(settings.columnOpacity / 100, 0.75) : settings.columnOpacity / 100)};
   border-radius: ${settings.columnRadius}px;
   padding: ${settings.columnPadding}px;
@@ -686,37 +707,37 @@ var require_controller = __commonJS({
   -webkit-backdrop-filter: ${settings.columnBlur ? `blur(${settings.columnBlur}px)` : "none"};
   transition: background-color 180ms ease, box-shadow 180ms ease, outline-color 180ms ease;
 }
-.kanban-plugin .kanban-plugin__lane-items {
+:is(.kanban-plugin, .kanban-plugin__drag-container) .kanban-plugin__lane-items {
   gap: ${settings.cardSpacing}px;
 }
-.kanban-plugin .kanban-plugin__lane-items > div {
+:is(.kanban-plugin, .kanban-plugin__drag-container) .kanban-plugin__lane-items > div {
   margin-block-start: 0;
 }
-.kanban-plugin .kanban-plugin__item,
-.kanban-plugin .kanban-plugin__item-content-wrapper,
-.kanban-plugin .kanban-plugin__item-title-wrapper {
+:is(.kanban-plugin, .kanban-plugin__drag-container) .kanban-plugin__item,
+:is(.kanban-plugin, .kanban-plugin__drag-container) .kanban-plugin__item-content-wrapper,
+:is(.kanban-plugin, .kanban-plugin__drag-container) .kanban-plugin__item-title-wrapper {
   background-color: var(--cs-kanban-card-background);
 }
-.kanban-plugin .kanban-plugin__item {
+:is(.kanban-plugin, .kanban-plugin__drag-container) .kanban-plugin__item {
   border-radius: ${settings.cardRadius}px;
   padding: ${settings.cardPadding}px;
   transition: box-shadow 180ms ease, opacity 180ms ease, outline-color 180ms ease;
 }
-.kanban-plugin .kanban-plugin__lane-items .kanban-plugin__item:hover {
+:is(.kanban-plugin, .kanban-plugin__drag-container) .kanban-plugin__lane-items .kanban-plugin__item:hover {
   ${hoverShadows ? `box-shadow: ${hoverShadows};` : ""}
 }
 ${settings.hoverGlow ? `${cardGlowSelector} { box-shadow: ${cardGlow}; }` : ""}
 ${settings.columnGlowEnabled ? `${columnGlowSelector} { box-shadow: ${columnGlow}; }` : ""}
-.kanban-plugin .kanban-plugin__drag-container > .kanban-plugin__item-wrapper .kanban-plugin__item {
+.kanban-plugin__drag-container > .kanban-plugin__item-wrapper .kanban-plugin__item {
   ${dragStyles[settings.dragStyle]}
 }
-.kanban-plugin .is-dropping > .kanban-plugin__lane {
+:is(.kanban-plugin, .kanban-plugin__drag-container) .is-dropping > .kanban-plugin__lane {
   ${settings.dragStyle === "outline" ? "outline: 2px solid var(--interactive-accent); outline-offset: 2px;" : ""}
   ${settings.dragStyle === "glow" ? "box-shadow: 0 0 18px var(--interactive-accent);" : ""}
 }
 @media (prefers-reduced-motion: reduce) {
-  .kanban-plugin .kanban-plugin__item,
-  .kanban-plugin .kanban-plugin__lane {
+  :is(.kanban-plugin, .kanban-plugin__drag-container) .kanban-plugin__item,
+  :is(.kanban-plugin, .kanban-plugin__drag-container) .kanban-plugin__lane {
     transition-duration: 0ms !important;
   }
 }
@@ -1684,6 +1705,7 @@ var require_profile_manager = __commonJS({
         if (!profile) throw new Error(`Cannot rename built-in or unknown profile "${id}".`);
         const trimmedName = name.trim();
         if (!trimmedName) throw new Error("Enter a profile name.");
+        if (trimmedName.length > 100) throw new Error("Profile name must be no longer than 100 characters.");
         profile.name = trimmedName;
         this.settingsManager.settings.customProfiles = this.customProfiles;
         return profile;
@@ -1766,11 +1788,13 @@ var require_theme_engine = __commonJS({
       }
       return `linear-gradient(${variables.tabBarGradientDirection}, ${color}, transparent)`;
     }
-    var ThemeEngine2 = class {
-      constructor(plugin) {
+    var ThemeEngine2 = class _ThemeEngine {
+      constructor(plugin, body = null) {
         this.plugin = plugin;
         this.styles = /* @__PURE__ */ new Map();
-        this.body = plugin.app.workspace.containerEl.ownerDocument.body;
+        this.body = body || plugin.app.workspace.containerEl.ownerDocument.body;
+        this.isSecondaryDocument = Boolean(body);
+        this.documentEngines = /* @__PURE__ */ new Map();
         this.previousClassState = null;
         this.previousProfile = null;
       }
@@ -1796,9 +1820,29 @@ var require_theme_engine = __commonJS({
           this.body.ownerDocument.head.appendChild(style);
           this.styles.set(id, style);
         }
-        style.textContent = css;
+        if (style.textContent !== css) style.textContent = css;
       }
       apply(profile) {
+        if (!this.isSecondaryDocument) {
+          const documents = this.plugin.moduleManager?.getDocuments?.() || /* @__PURE__ */ new Set([this.body.ownerDocument]);
+          for (const [doc, engine] of this.documentEngines) {
+            if (!documents.has(doc)) {
+              engine.unload();
+              this.documentEngines.delete(doc);
+            }
+          }
+          for (const doc of documents) {
+            if (doc === this.body.ownerDocument) continue;
+            let engine = this.documentEngines.get(doc);
+            if (!engine) {
+              engine = new _ThemeEngine(this.plugin, doc.body);
+              const coreCss = this.styles.get("core")?.textContent;
+              if (coreCss) engine.setStyle("core", coreCss);
+              this.documentEngines.set(doc, engine);
+            }
+            engine.apply(profile);
+          }
+        }
         if (this.previousClassState === null) {
           this.previousClassState = this.body.classList.contains("customization-studio-enabled");
         }
@@ -1830,6 +1874,8 @@ body.customization-studio-enabled[data-customization-studio-profile="${profile.i
         this.setStyle("profile", profile.customCss || "");
       }
       unload() {
+        for (const engine of this.documentEngines.values()) engine.unload();
+        this.documentEngines.clear();
         if (this.previousClassState === false) {
           this.body.classList.remove("customization-studio-enabled");
         }
@@ -1859,6 +1905,20 @@ var require_module_manager = __commonJS({
         this.plugin = plugin;
         this.modules = MODULES;
         this.controllers = /* @__PURE__ */ new Map();
+        this.documents = /* @__PURE__ */ new Map();
+        this.windowDocuments = /* @__PURE__ */ new Set();
+        this.closedDocuments = /* @__PURE__ */ new WeakSet();
+        this.pendingRefresh = null;
+      }
+      getDocuments() {
+        const workspace = this.plugin.app.workspace;
+        const documents = /* @__PURE__ */ new Set([workspace.containerEl.ownerDocument]);
+        workspace.iterateAllLeaves?.((leaf) => {
+          const doc = leaf.view?.containerEl?.ownerDocument;
+          if (doc && !this.closedDocuments.has(doc)) documents.add(doc);
+        });
+        for (const doc of this.windowDocuments) documents.add(doc);
+        return documents;
       }
       load() {
         for (const module3 of this.modules) {
@@ -1866,10 +1926,48 @@ var require_module_manager = __commonJS({
           this.controllers.set(module3.id, controller);
           controller.start();
         }
-        this.plugin.registerEvent(
-          this.plugin.app.workspace.on("layout-change", () => this.refreshWithNotice())
-        );
+        const workspace = this.plugin.app.workspace;
+        this.plugin.registerEvent(workspace.on("layout-change", () => this.refreshWithNotice()));
+        this.plugin.registerEvent(workspace.on("window-open", (win) => {
+          this.closedDocuments.delete(win.doc);
+          this.windowDocuments.add(win.doc);
+          this.refreshWithNotice();
+        }));
+        this.plugin.registerEvent(workspace.on("window-close", (win) => {
+          this.closedDocuments.add(win.doc);
+          this.windowDocuments.delete(win.doc);
+          this.refreshWithNotice();
+        }));
+        this.watchDocuments();
         this.plugin.register(() => this.unload());
+      }
+      watchDocuments() {
+        const documents = this.getDocuments();
+        for (const [doc, observer] of this.documents) {
+          if (!documents.has(doc)) {
+            observer?.disconnect();
+            this.documents.delete(doc);
+          }
+        }
+        const selector = this.modules.map((module3) => module3.rootSelector).join(", ");
+        for (const doc of documents) {
+          if (this.documents.has(doc)) continue;
+          const Observer = doc.defaultView?.MutationObserver || globalThis.MutationObserver;
+          const observer = Observer && doc.body ? new Observer((records) => {
+            const relevant = records.some(
+              (record) => [...record.addedNodes, ...record.removedNodes].some(
+                (node) => node.nodeType === 1 && (node.matches?.(selector) || node.querySelector?.(selector))
+              )
+            );
+            if (!relevant || this.pendingRefresh !== null) return;
+            this.pendingRefresh = setTimeout(() => {
+              this.pendingRefresh = null;
+              this.refreshWithNotice();
+            }, 40);
+          }) : null;
+          observer?.observe(doc.body, { childList: true, subtree: true });
+          this.documents.set(doc, observer);
+        }
       }
       isEnabled(moduleId) {
         const profile = this.plugin.profileManager.getActiveProfile();
@@ -1904,17 +2002,25 @@ var require_module_manager = __commonJS({
         return controller?.getColumnNames?.() || [];
       }
       refresh(profile = this.plugin.profileManager.getActiveProfile()) {
+        this.watchDocuments();
         for (const controller of this.controllers.values()) controller.refresh(profile);
       }
       refreshWithNotice() {
         try {
-          this.refresh();
+          const profile = this.plugin.profileManager.getActiveProfile();
+          this.plugin.themeEngine?.apply(profile);
+          this.refresh(profile);
         } catch (error) {
           console.error("Customization Studio failed to update module styles after a workspace change.", error);
           this.plugin.notifyUser(`Customization Studio could not update a module: ${error.message}`);
         }
       }
       unload() {
+        if (this.pendingRefresh !== null) clearTimeout(this.pendingRefresh);
+        this.pendingRefresh = null;
+        for (const observer of this.documents.values()) observer?.disconnect();
+        this.documents.clear();
+        this.windowDocuments.clear();
         for (const controller of this.controllers.values()) controller.unload();
         this.controllers.clear();
       }
@@ -2175,6 +2281,7 @@ var require_settings_tab = __commonJS({
         });
         new Setting(section).setName("New profile").setDesc("Create a profile by copying the active profile.").addText((text) => {
           text.setPlaceholder("Profile name").setValue(this.newProfileName);
+          text.inputEl.maxLength = 100;
           text.onChange((value) => {
             this.newProfileName = value;
           });
@@ -2192,9 +2299,12 @@ var require_settings_tab = __commonJS({
             this.refreshAllViews();
             await this.persistChange(context, true);
           })));
-          new Setting(section).setName("Rename profile").addText((text) => text.setPlaceholder(active.name).setValue(this.renameValue || active.name).onChange((value) => {
-            this.renameValue = value;
-          })).addButton((button) => button.setButtonText("Rename").onClick(() => this.runChange(async () => {
+          new Setting(section).setName("Rename profile").addText((text) => {
+            text.inputEl.maxLength = 100;
+            text.setPlaceholder(active.name).setValue(this.renameValue || active.name).onChange((value) => {
+              this.renameValue = value;
+            });
+          }).addButton((button) => button.setButtonText("Rename").onClick(() => this.runChange(async () => {
             this.plugin.profileManager.renameCustomProfile(active.id, this.renameValue);
             this.renameValue = "";
             this.plugin.applyCustomization();
@@ -2464,10 +2574,11 @@ var require_settings_tab = __commonJS({
         });
         for (const name of names) {
           const colors = profile.modules[module3.id].columnColors;
+          const currentColors = () => this.plugin.profileManager.getActiveProfile().modules[module3.id].columnColors;
           new Setting(containerEl).setName(name).addColorPicker((picker) => picker.setValue(colors[name] || this.plugin.profileManager.getActiveProfile().variables.accentColor || "#7c6ce7").onChange((value) => this.updateModule(module3.id, {
-            columnColors: { ...colors, [name]: value }
+            columnColors: { ...currentColors(), [name]: value }
           }, context))).addButton((button) => button.setButtonText("Clear").onClick(() => {
-            const next = { ...colors };
+            const next = { ...currentColors() };
             delete next[name];
             this.updateModule(module3.id, { columnColors: next }, context);
           }));

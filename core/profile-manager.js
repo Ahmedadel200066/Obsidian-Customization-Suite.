@@ -280,6 +280,7 @@ class ProfileManager {
     if (!profile) throw new Error(`Cannot rename built-in or unknown profile "${id}".`);
     const trimmedName = name.trim();
     if (!trimmedName) throw new Error("Enter a profile name.");
+    if (trimmedName.length > 100) throw new Error("Profile name must be no longer than 100 characters.");
     profile.name = trimmedName;
     this.settingsManager.settings.customProfiles = this.customProfiles;
     return profile;

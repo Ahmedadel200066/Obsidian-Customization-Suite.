@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Preserve successive Kanban column color edits and Clear actions in one settings view.
+- Discover review dialogs and drag portals outside the main workspace.
+- Apply and clean up module/profile styles independently in popout documents.
+- Keep card and lane customization on body-mounted Kanban drag previews.
+- Reject overlong profile names before rename can save invalid startup data.
+- Add six regression tests and bug-fix verification notes.
+
 - Build the self-contained Obsidian plugin bundle directly to repository-root
   `main.js`.
 - Add a published-release workflow that runs tests, validates the bundle, and
