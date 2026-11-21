@@ -180,10 +180,13 @@ To rebuild on source changes:
 npm run dev
 ```
 
-The workflow in `.github/workflows/release.yml` runs on published releases,
+The workflow in `.github/workflows/release.yml` runs when a version tag is pushed,
 installs locked dependencies, builds and tests the project, validates the
-bundle, creates a root-flat install ZIP, and attaches `main.js`, `manifest.json`,
-`styles.css`, and the optional ZIP to the release. The
+bundle, verifies that the tag matches manifest/package versions and versions.json,
+creates a root-flat install ZIP, and publishes a GitHub release with `main.js`,
+`manifest.json`, `styles.css`, LICENSE, and the optional ZIP. It stages the
+assets in a draft and publishes only after upload. It refuses to overwrite
+an already published release. The
 repository/source archive and installable ZIP are separate artifacts.
 
 ## Compatibility and known limitations

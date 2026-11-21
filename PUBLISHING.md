@@ -22,11 +22,12 @@ Publishing source to GitHub alone does not add a plugin to Community Plugins.
    compatibility mapping in versions.json.
 6. Review and approve the exact changes before pushing. Do not merge or
    publish a release without the owner's specific approval.
-7. Create a GitHub release with a tag that exactly matches manifest.version,
-   without an extra `v` prefix. Publish release notes and attach `main.js`,
-   `manifest.json`, and `styles.css` individually. The workflow also attaches
-   LICENSE and an optional install ZIP. A ZIP is not a substitute for the
-   individual assets. Build provenance attestations are recommended.
+7. Update RELEASE_NOTES.md, then push a tag that exactly matches
+   manifest.version, without an extra `v` prefix. The tag-triggered workflow
+   builds, tests, validates versions.json, and publishes the GitHub release
+   with `main.js`, `manifest.json`, and `styles.css` individually. It also
+   attaches LICENSE and an optional install ZIP. A ZIP is not a substitute for
+   the individual assets. Build provenance attestations are recommended.
 8. Download those exact release assets into a clean plugin directory and test
    them, rather than testing from a full development checkout that can hide
    missing files. The release workflow has not been run by these local tests.

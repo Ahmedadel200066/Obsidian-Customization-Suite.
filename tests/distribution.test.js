@@ -29,3 +29,21 @@ test("support uses the owner-approved destination in manifest and README, not a 
 test("release workflow attaches standard assets individually as well as the ZIP", () => {
   assert.match(read(".github/workflows/release.yml"), /gh release upload[^\n]*main\.js manifest\.json styles\.css LICENSE/);
 });
+
+
+test("tag release validates the current compatibility map and rejects mismatched tags", async () => {
+  const { validateRelease } = require("../scripts/validate-release.cjs");
+  const manifest = await validateRelease(root, "0.1.0");
+  assert.equal(manifest.minAppVersion, "1.9.0");
+  await assert.rejects(() => validateRelease(root, "v0.1.0"), /without a v prefix/);
+  await assert.rejects(() => validateRelease(root, "0.2.0"), /manifest.version/);
+});
+
+test("release workflow runs on tags and publishes only after verified draft assets", () => {
+  const workflow = read(".github/workflows/release.yml");
+  assert.match(workflow, /push:\s+tags:/);
+  assert.match(workflow, /node scripts\/validate-release\.cjs/);
+  assert.match(workflow, /git diff --exit-code -- main\.js styles\.css/);
+  assert.ok(workflow.indexOf("gh release upload") < workflow.indexOf("gh release edit"));
+  assert.match(workflow, /Refusing to replace its assets/);
+});
