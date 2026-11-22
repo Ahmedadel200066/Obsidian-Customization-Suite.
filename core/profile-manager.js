@@ -207,7 +207,9 @@ class ProfileManager {
   }
 
   getProfiles() {
-    return [...this.builtInProfiles, ...this.customProfiles];
+    const result=[...this.builtInProfiles, ...this.customProfiles];
+    const id=this.presentation?.state.defaultProfileId;
+    return id?[...result.filter(p=>p.id===id),...result.filter(p=>p.id!==id)]:result;
   }
 
   getProfile(id) {
@@ -215,7 +217,7 @@ class ProfileManager {
   }
 
   getActiveProfile() {
-    return this.getProfile(this.settingsManager.settings.activeProfileId);
+    return this.presentation?.resolveProfile(this.settingsManager.settings.activeProfileId) || this.getProfile(this.settingsManager.settings.activeProfileId);
   }
 
   makeUniqueId(requestedId) {
@@ -237,18 +239,35 @@ class ProfileManager {
     } catch (error) {
       throw new Error(`Profile JSON is invalid: ${error.message}`);
     }
+    let appearance;
+    if(parsed?.format==="customization-studio-profile"){
+      if(parsed.version!==2||!this.presentation)throw new Error("This profile needs the new appearance-enabled build.");
+      appearance=parsed.appearance;if(!appearance||typeof appearance!=="object"||Array.isArray(appearance))throw new Error("The imported profile is missing its appearance settings.");parsed=parsed.profile;
+    }
     const imported = validateProfile(parsed, this.knownModules);
+    if(appearance){
+      for(const mode of ["light","dark"])for(const variant of [appearance.variants?.[mode],appearance.baseline?.[mode]]){
+        if(!variant)throw new Error("Missing imported light/dark variant.");
+        validateProfile({...imported,variables:variant.variables,modules:variant.modules},this.knownModules);
+      }
+      this.presentation.validateState({version:1,defaultProfileId:null,profiles:{[imported.id]:appearance}});
+    }
     const id = this.makeUniqueId(imported.id);
     const profile = { ...imported, id };
     this.customProfiles.push(profile);
+    if(this.presentation)this.presentation.state.profiles[id]=appearance?JSON.parse(JSON.stringify(appearance)):this.presentation.newMeta(profile,false);
     this.settingsManager.settings.customProfiles = this.customProfiles;
     this.settingsManager.settings.activeProfileId = profile.id;
     return profile;
   }
 
-  exportProfile(id) {
+  exportProfile(id,legacy=false) {
     const profile = this.getProfile(id);
     if (!profile) throw new Error(`Unknown profile "${id}".`);
+    if(this.presentation){
+      const current=this.presentation.resolveProfile(id),clean=this.presentation.legacyData({customProfiles:[current]}).customProfiles[0];
+      return JSON.stringify(legacy?clean:{format:"customization-studio-profile",version:2,profile:clean,appearance:this.presentation.meta(id)},null,2);
+    }
     return JSON.stringify(profile, null, 2);
   }
 
@@ -264,9 +283,28 @@ class ProfileManager {
       name: trimmedName
     }, this.knownModules);
     this.customProfiles.push(profile);
+    this.presentation?.cloneProfile(sourceId,profile.id);
     this.settingsManager.settings.customProfiles = this.customProfiles;
     this.settingsManager.settings.activeProfileId = profile.id;
     return profile;
+  }
+
+  createFromDefault() {
+    const id=this.presentation?.state.defaultProfileId;
+    if(!id) return this.createCopyFromCurrent();
+    const names=new Set(this.getProfiles().map(p=>p.name.toLowerCase()));let name="Default copy",n=2;
+    while(names.has(name.toLowerCase()))name=`Default copy ${n++}`;
+    return this.createCustomProfile(name,id);
+  }
+
+  createCopyFromCurrent() {
+    const source = this.getActiveProfile();
+    const base = source.name.replace(/ copy(?: [0-9]+)?$/i, "").slice(0, 88);
+    const names = new Set(this.getProfiles().map(profile => profile.name.toLowerCase()));
+    let name = `${base} copy`;
+    let suffix = 2;
+    while (names.has(name.toLowerCase())) name = `${base} copy ${suffix++}`;
+    return this.createCustomProfile(name, source.id);
   }
 
   duplicateProfile(id) {
@@ -310,6 +348,7 @@ class ProfileManager {
       moduleEnabled: { ...active.moduleEnabled, ...(update.moduleEnabled || {}) },
       modules
     }, this.knownModules);
+    this.presentation?.recordUpdate(update);
     this.customProfiles[index] = updated;
     this.settingsManager.settings.customProfiles = this.customProfiles;
     return updated;
@@ -317,10 +356,11 @@ class ProfileManager {
 
   updateModuleSettings(moduleId, update) {
     if (!this.knownModules.has(moduleId)) throw new Error(`Unknown customization module "${moduleId}".`);
-    const active = this.getActiveProfile();
-    return this.updateActiveProfile({
-      modules: { [moduleId]: { ...active.modules[moduleId], ...update } }
-    });
+    const module=this.modules.find(item=>item.id===moduleId),active=this.getActiveProfile();
+    const followsTheme=active.modules[moduleId].useThemeColors===true&&!Object.hasOwn(update,"useThemeColors")&&Object.keys(update).some(key=>module.settingsSchema[key]?.type==="color");
+    const result=this.updateActiveProfile({modules:{[moduleId]:followsTheme?{...update,useThemeColors:false}:update},...(this.presentation?{moduleEnabled:{[moduleId]:true}}:{})});
+    if(followsTheme&&this.presentation){const {value}=this.presentation.variant(active.id);value.moduleKeys[moduleId]=value.moduleKeys[moduleId].filter(key=>key!=="useThemeColors");}
+    return result;
   }
 
   setModuleEnabled(moduleId, enabled) {
@@ -331,12 +371,14 @@ class ProfileManager {
   }
 
   deleteCustomProfile(id) {
+    if(id===this.presentation?.state.defaultProfileId)throw new Error("Default is the editable template and cannot be deleted.");
     const index = this.customProfiles.findIndex((profile) => profile.id === id);
     if (index < 0) throw new Error(`Cannot delete built-in or unknown profile "${id}".`);
     this.customProfiles.splice(index, 1);
+    if(this.presentation)delete this.presentation.state.profiles[id];
     this.settingsManager.settings.customProfiles = this.customProfiles;
     if (this.settingsManager.settings.activeProfileId === id) {
-      this.settingsManager.settings.activeProfileId = this.builtInProfiles[0].id;
+      this.settingsManager.settings.activeProfileId = this.presentation?.state.defaultProfileId || this.builtInProfiles[0].id;
     }
   }
 }

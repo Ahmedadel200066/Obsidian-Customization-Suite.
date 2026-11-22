@@ -1,3 +1,5 @@
+const { selectiveStyles } = require("../core/selective-styles");
+
 class BaseModuleController {
   constructor(plugin, manager, module) {
     this.plugin = plugin;
@@ -18,7 +20,8 @@ class BaseModuleController {
   refresh(profile) {
     this.profile = profile;
     this.settings = this.module.validateSettings(profile.modules[this.module.id]);
-    if (profile.moduleEnabled[this.module.id] === false ||
+    if (this.plugin.settingsManager?.settings.customizationEnabled === false ||
+        profile.moduleEnabled[this.module.id] === false ||
         !this.manager.isTargetPluginEnabled(this.module)) {
       this.deactivate();
       return;
@@ -58,7 +61,7 @@ class BaseModuleController {
       return;
     }
     const observer = new Observer(() => this.scheduleApply(root));
-    observer.observe(root, { childList: true, subtree: true, characterData: true });
+    observer.observe(root, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ["style", "src"] });
     this.roots.set(root, observer);
   }
 
@@ -80,7 +83,9 @@ class BaseModuleController {
         this.styles.delete(doc);
       }
     }
-    const css = `${this.module.styles(this.settings, this)}\n${this.module.customCss(this.settings, this)}`;
+    const keys=this.profile?.studio?.moduleKeys[this.module.id]||[];
+    const base=this.profile?.studio?.neutral ? selectiveStyles(this.module,this.settings,this,keys) : this.module.styles(this.settings,this);
+    const css = `${base}\n${this.module.customCss(this.settings, this)}\n${this.additionalStyles?.()||""}`;
     for (const doc of documents) {
       let style = this.styles.get(doc);
       if (!style?.parentNode) {

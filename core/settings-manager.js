@@ -1,4 +1,5 @@
 const DEFAULT_SETTINGS = {
+  customizationEnabled: true,
   activeProfileId: "minimal",
   customProfiles: [],
   moduleEnabled: {},
@@ -65,6 +66,10 @@ class SettingsManager {
       throw new Error("Customization Studio settings must be a JSON object.");
     }
 
+    const customizationEnabled = data.customizationEnabled ?? true;
+    if (typeof customizationEnabled !== "boolean") {
+      throw new Error("Customization Studio customizationEnabled must be a boolean.");
+    }
     const customProfiles = data.customProfiles ?? [];
     const moduleEnabled = data.moduleEnabled ?? {};
     const activeProfileId = data.activeProfileId ?? DEFAULT_SETTINGS.activeProfileId;
@@ -85,6 +90,7 @@ class SettingsManager {
 
     this.settings = {
       ...DEFAULT_SETTINGS,
+      customizationEnabled,
       activeProfileId,
       customProfiles,
       moduleEnabled: { ...moduleEnabled },
@@ -122,11 +128,12 @@ class SettingsManager {
     if (!this.dirty) return;
 
     const snapshot = JSON.parse(JSON.stringify(this.settings));
+    const appearanceSnapshot=this.plugin.presentation?.snapshot();
     const savedRevision = this.revision;
     this.dirty = false;
     const pending = this.saveQueue
       .catch(() => undefined)
-      .then(() => this.plugin.saveData(snapshot));
+      .then(() => this.plugin.presentation ? this.plugin.presentation.save(snapshot,appearanceSnapshot) : this.plugin.saveData(snapshot));
     this.saveQueue = pending;
     this.flushPromise = pending;
     try {

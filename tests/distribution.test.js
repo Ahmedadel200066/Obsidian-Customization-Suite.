@@ -33,10 +33,10 @@ test("release workflow attaches only the three standard assets", () => {
 
 test("tag release validates the current compatibility map and rejects mismatched tags", async () => {
   const { validateRelease } = require("../scripts/validate-release.cjs");
-  const manifest = await validateRelease(root, "0.1.1");
+  const manifest = await validateRelease(root, "1.2.0");
   assert.equal(manifest.minAppVersion, "1.9.0");
-  await assert.rejects(() => validateRelease(root, "v0.1.1"), /without a v prefix/);
-  await assert.rejects(() => validateRelease(root, "0.2.0"), /manifest.version/);
+  await assert.rejects(() => validateRelease(root, "v1.2.0"), /without a v prefix/);
+  await assert.rejects(() => validateRelease(root, "1.3.0"), /manifest.version/);
 });
 
 test("release workflow runs on tags and publishes only after verified draft assets", () => {
@@ -77,14 +77,15 @@ test("active-tab CSS keeps its fallback without duplicate background declaration
 });
 
 
-test("0.1.1 preserves the prior compatibility mapping and all version files agree", () => {
+test("1.2.0 preserves the prior compatibility mapping and all version files agree", () => {
   const version = JSON.parse(read("manifest.json")).version;
   const lock = JSON.parse(read("package-lock.json"));
-  assert.equal(version, "0.1.1");
+  assert.equal(version, "1.2.0");
   assert.equal(JSON.parse(read("package.json")).version, version);
   assert.equal(lock.version, version);
   assert.equal(lock.packages[""].version, version);
   const versions = JSON.parse(read("versions.json"));
   assert.equal(versions["0.1.0"], "1.9.0");
+  assert.equal(versions["0.1.1"], "1.9.0");
   assert.equal(versions[version], "1.9.0");
 });

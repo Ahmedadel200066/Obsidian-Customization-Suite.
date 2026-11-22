@@ -1,7 +1,7 @@
-# Customization Studio 0.1.1
+# Customization Studio 1.2.0
 
-Patch release for scan findings and safer integration handling. This is not
-a Community Plugins listing and has not been submitted to Obsidian.
+Feature release: Light/Dark profiles, neutral Default profile, per-shape
+Bases card settings, and a save-error fix.
 
 ## Install
 
@@ -21,20 +21,22 @@ This release attaches exactly those three files. GitHub's automatic source-code
 archives are not runtime packages. The MIT license remains in the repository
 and its full notice is embedded in main.js.
 
-## Changes since 0.1.0
+## Changes since 0.1.1
 
-- Removed the host application's name from the manifest description to meet
-  the directory scan rule.
-- Kept active-tab fallback colors without duplicate background declarations.
-- Added GitHub build provenance attestations for the three runtime assets.
-- Removed the optional ZIP and separate LICENSE from future release uploads.
-- Clarified external images, imported CSS, and user-clicked clipboard export
-  in the privacy documentation. No backend or analytics was added.
-- Updated settings headings to the host API and sentence case.
-- Guarded plugin discovery and normalized vault-relative plugin/CSS paths.
+- Neutral, editable Default profile created on first run from your current
+  appearance. Nothing visibly changes when you enable it.
+- Follow Obsidian, Light, or Dark per profile, with paired preset palettes.
+- Per-shape settings for Bases cards (size, Disc protrusion, hover effects
+  that default to Off) with live re-measurement.
+- Export and import of profile variants and shape settings, with backups and
+  interrupted-save recovery.
+- Master pause and resume switch.
+- Fixed a repeating "EEXIST: file already exists" notice on every save. The
+  appearance backup now overwrites the old copy, and a failed backup no longer
+  blocks saving.
 
-Published 0.1.0 assets and its tag are unchanged. This release does not imply
-that the directory review passed or that manual vault testing is complete.
+Published 0.1.0 and 0.1.1 assets and tags are unchanged. This release has
+not had a full real-vault test across themes, Style Settings, or mobile.
 
 ## Included
 

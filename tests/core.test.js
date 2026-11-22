@@ -920,3 +920,69 @@ test("core stylesheet paths use the host path normalizer", async () => {
   };
   assert.equal(await new ThemeEngine(plugin).loadCoreCss(), true);
 });
+
+test("master customization defaults enabled, persists pause, and validates stored state", async () => {
+  const plugin = makePlugin();const {settings,profiles}=await loadProfileManager(plugin);
+  assert.equal(settings.settings.customizationEnabled,true);
+  profiles.createCopyFromCurrent();const id=profiles.getActiveProfile().id;
+  settings.settings.customizationEnabled=false;await settings.save();
+  const restarted=await loadProfileManager(plugin);
+  assert.equal(restarted.settings.settings.customizationEnabled,false);
+  assert.equal(restarted.profiles.getActiveProfile().id,id);
+  await assert.rejects(()=>new SettingsManager(makePlugin({customizationEnabled:"yes"})).load(),/must be a boolean/);
+});
+
+test("one click creates unique independent editable copies without a required name", async () => {
+  const {profiles}=await loadProfileManager(makePlugin());
+  const original=JSON.stringify(profiles.getActiveProfile());
+  const first=profiles.createCopyFromCurrent();assert.equal(first.name,"Minimal copy");
+  profiles.updateModuleSettings("kanban",{cardRadius:21});
+  const second=profiles.createCopyFromCurrent();assert.equal(second.name,"Minimal copy 2");
+  assert.notEqual(first.id,second.id);assert.equal(second.modules.kanban.cardRadius,21);
+  profiles.updateModuleSettings("kanban",{cardRadius:17});assert.equal(profiles.getProfile(first.id).modules.kanban.cardRadius,21);
+  assert.equal(JSON.stringify(profiles.getProfile("minimal")),original);
+});
+
+test("master pause clears effects and markers, retains UI CSS, and cannot revive on refresh", async () => {
+  const plugin=makePlugin();const {settings,profiles}=await loadProfileManager(plugin);
+  plugin.settingsManager=settings;plugin.profileManager=profiles;profiles.createCopyFromCurrent();
+  plugin.app.plugins.enabledPlugins.add("obsidian-kanban");
+  const title=new FakeElement(plugin.document);title.textContent="Done";
+  const lane=new FakeElement(plugin.document,{[kanban.selectors.laneTitle]:title});
+  const board=new FakeElement(plugin.document,{[kanban.selectors.laneWrapper]:[lane]});board.children.push(lane);
+  plugin.app.workspace.containerEl.selectors[kanban.rootSelector]=[board];
+  const theme=new ThemeEngine(plugin);theme.setStyle("core",".customization-studio-settings {}");theme.apply(profiles.getActiveProfile());
+  plugin.themeEngine=theme;const manager=new ModuleManager(plugin);manager.load();
+  assert.equal(lane.getAttribute("data-cs-kanban-column"),"c0");
+  settings.settings.customizationEnabled=false;manager.pause();theme.pause();
+  assert.deepEqual([...theme.styles.keys()],["core"]);assert.equal(lane.getAttribute("data-cs-kanban-column"),null);
+  assert.equal(manager.documents.size,0);assert.equal(manager.controllers.get("kanban").roots.size,0);
+  profiles.createCopyFromCurrent();theme.apply(profiles.getActiveProfile());manager.refreshWithNotice();manager.refresh();
+  manager.controllers.get("kanban").refresh(profiles.getActiveProfile());
+  assert.deepEqual([...theme.styles.keys()],["core"]);assert.equal(lane.getAttribute("data-cs-kanban-column"),null);
+  settings.settings.customizationEnabled=true;theme.apply(profiles.getActiveProfile());manager.refresh();
+  assert.ok(theme.styles.get("variables"));assert.ok(lane.getAttribute("data-cs-kanban-column"));
+  manager.unload();theme.unload();assert.equal(theme.styles.size,0);
+});
+
+test("starting paused does not attach integration styles or observers", async () => {
+  const plugin=makePlugin({customizationEnabled:false});const {settings,profiles}=await loadProfileManager(plugin);
+  plugin.settingsManager=settings;plugin.profileManager=profiles;
+  const manager=new ModuleManager(plugin);manager.load();
+  assert.equal(manager.documents.size,0);for(const c of manager.controllers.values()){assert.equal(c.roots.size,0);assert.equal(c.styles.size,0);}
+  manager.refreshWithNotice();assert.equal(manager.documents.size,0);manager.unload();
+});
+
+test("pause removes effects in secondary windows and preserves preexisting body state", async () => {
+  const plugin=makePlugin();const {settings,profiles}=await loadProfileManager(plugin);
+  plugin.settingsManager=settings;plugin.profileManager=profiles;const other=makeDocument();
+  plugin.document.body.classList.add("customization-studio-enabled");plugin.document.body.dataset.customizationStudioProfile="external";
+  plugin.moduleManager={getDocuments:()=>new Set([plugin.document,other])};
+  const theme=new ThemeEngine(plugin);theme.setStyle("core","settings{}");theme.apply(profiles.getActiveProfile());
+  assert.equal(theme.documentEngines.size,1);const secondary=theme.documentEngines.get(other);
+  profiles.createCopyFromCurrent();settings.settings.customizationEnabled=false;theme.pause();theme.pause();
+  assert.deepEqual([...secondary.styles.keys()],["core"]);assert.equal(other.body.classList.contains("customization-studio-enabled"),false);
+  assert.equal(plugin.document.body.dataset.customizationStudioProfile,"external");assert.equal(plugin.document.body.classList.contains("customization-studio-enabled"),true);
+  settings.settings.customizationEnabled=true;theme.apply(profiles.getActiveProfile());assert.ok(secondary.styles.get("variables"));
+  theme.unload();assert.equal(plugin.document.body.dataset.customizationStudioProfile,"external");assert.equal(secondary.styles.size,0);
+});

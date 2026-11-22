@@ -1,16 +1,18 @@
 const { PluginSettingTab, Setting, Notice } = require("obsidian");
 const { MODULES } = require("./module-manager");
+const { CARD_SHAPES } = require("../modules/bases/card-shapes");
+const { shapeSchema, HOVER_EFFECTS } = require("../modules/bases/shape-options");
 
 class CustomizationSettingTab extends PluginSettingTab {
   constructor(app, plugin) {
     super(app, plugin);
     this.plugin = plugin;
     this.importText = "";
-    this.newProfileName = "";
     this.renameValue = "";
     this.viewContexts = new WeakMap();
     this.openViews = new Set();
     this.viewSaveTimers = new Set();
+    this.pendingInputs=new Map();
   }
 
   display() {
@@ -50,8 +52,27 @@ class CustomizationSettingTab extends PluginSettingTab {
     containerEl.empty();
     containerEl.addClass("customization-studio-settings");
     const header = containerEl.createEl("header", { cls: "cs-settings-header" });
+    const customizationEnabled = this.plugin.settingsManager.settings.customizationEnabled !== false;
+    const master = new Setting(header).setName("Customization")
+      .setDesc("Pause all Customization Studio effects without losing your profiles.");
+    master.settingEl?.addClass("cs-master-customization");
+    master.controlEl?.createEl("span", {
+      cls: "cs-customization-state", text: customizationEnabled ? "Enabled" : "Paused",
+      attr: { role: "status", "aria-live": "polite" }
+    });
+    master.addToggle((toggle) => {
+      const element = toggle.toggleEl || toggle.inputEl;
+      element?.setAttribute?.("aria-label", "Customization Studio customization");
+      toggle.setValue(customizationEnabled).onChange((enabled) => this.runChange(async () => {
+        context.focusMasterToggle = true;
+        await this.plugin.setCustomizationEnabled(enabled);
+      }));
+      if (context.focusMasterToggle) { element?.focus?.(); delete context.focusMasterToggle; }
+    });
     header.createEl("p", {
-      text: "Visual profiles for Obsidian and supported plugins. Settings preview immediately and save automatically."
+      text: customizationEnabled
+        ? "Visual profiles for Obsidian and supported plugins. Settings preview immediately and save automatically."
+        : "Customization is paused. You can edit profiles; effects return when enabled."
     });
     const activeProfile = this.plugin.profileManager.getActiveProfile();
     const profileHeader = header.createEl("div", {
@@ -81,7 +102,7 @@ class CustomizationSettingTab extends PluginSettingTab {
       .map((module) => module.name);
     const moduleSummary = profileHeader.createEl("span", {
       cls: "cs-profile-modules",
-      text: enabledModules.length ? `Enabled: ${enabledModules.join(", ")}` : "No modules enabled"
+      text: enabledModules.length ? `${customizationEnabled ? "Enabled" : "Configured"}: ${enabledModules.join(", ")}` : "No modules enabled"
     });
     context.preview = { name: profileName, swatches: [...swatches.children], moduleSummary };
 
@@ -224,7 +245,20 @@ class CustomizationSettingTab extends PluginSettingTab {
     this.openViews.delete(context);
   }
 
+  queueLiveInput(element,change) {
+    const previous=this.pendingInputs.get(element);if(previous)clearTimeout(previous.timer);
+    const entry={change,timer:setTimeout(()=>this.flushLiveInput(element),180)};this.pendingInputs.set(element,entry);
+  }
+
+  flushLiveInput(element) {
+    const entry=this.pendingInputs.get(element);if(!entry)return;
+    clearTimeout(entry.timer);this.pendingInputs.delete(element);return entry.change();
+  }
+
+  async flushLiveInputs() {await Promise.all([...this.pendingInputs.keys()].map(element=>this.flushLiveInput(element)));}
+
   dispose() {
+    for(const entry of this.pendingInputs.values())clearTimeout(entry.timer);this.pendingInputs.clear();
     this.captureViewState();
     for (const context of this.openViews) {
       context.containerEl.removeEventListener("scroll", context.scrollHandler);
@@ -305,16 +339,12 @@ class CustomizationSettingTab extends PluginSettingTab {
     const section = containerEl.createEl("div", { cls: "cs-section" });
     new Setting(section).setName("Profiles").setHeading();
     section.createEl("p", {
-      text: `Editing profiles. The active profile is "${active.name}".`
-    });
-    section.createEl("p", {
-      cls: "cs-suggestions-unavailable",
-      text: "Suggested profiles are unavailable: this version does not define recommendation rules or verified theme-detection behavior."
+      text: isCustom ? "Editing your copy. Changes save automatically." : "Built-in preset. Use Manage profile > Duplicate to make an editable copy. Create from Default starts from your own template instead."
     });
 
     new Setting(section)
       .setName("Active profile")
-      .setDesc(`Currently active: ${active.name}. Switching applies the profile immediately.`)
+      .setDesc(`Currently selected: ${active.name}. ${this.plugin.settingsManager.settings.customizationEnabled === false ? "Changes apply when customization is enabled." : "Switching applies the profile immediately."}`)
       .addDropdown((dropdown) => {
         for (const profile of this.plugin.profileManager.getProfiles()) {
           dropdown.addOption(profile.id, profile.name);
@@ -324,31 +354,36 @@ class CustomizationSettingTab extends PluginSettingTab {
           this.plugin.applyCustomization();
           this.refreshAllViews();
           await this.persistChange(context, true);
-          new Notice(`Customization Studio: applied "${this.plugin.profileManager.getActiveProfile().name}".`);
+          new Notice(`Customization Studio: ${this.plugin.settingsManager.settings.customizationEnabled === false ? "selected" : "applied"} "${this.plugin.profileManager.getActiveProfile().name}".`);
+        }));
+      });
+
+    if(this.plugin.presentation)new Setting(section).setName("Appearance").setDesc("Each profile has Light and Dark variants. Follow Obsidian uses the host/system theme; editing changes the current variant.")
+      .addDropdown(dropdown=>{
+        dropdown.addOption("auto","Follow Obsidian / system").addOption("light","Light").addOption("dark","Dark");
+        dropdown.setValue(this.plugin.presentation.meta().mode).onChange(mode=>this.runChange(async()=>{
+          this.plugin.presentation.setMode(mode);this.plugin.applyCustomization();this.refreshAllViews();await this.persistChange(context,true);
         }));
       });
 
     new Setting(section)
-      .setName("New profile")
-      .setDesc("Create a profile by copying the active profile.")
-      .addText((text) => {
-        text.setPlaceholder("Profile name").setValue(this.newProfileName);
-        text.inputEl.maxLength = 100;
-        text.onChange((value) => { this.newProfileName = value; });
-      })
+      .setName("Create profile")
+      .setDesc("Start from your editable Default template, not an imposed preset. Rename the new profile later.")
       .addButton((button) => button
-        .setButtonText("Create")
+        .setButtonText(this.plugin.presentation?"Create from Default":"Create copy from current")
         .setCta()
         .onClick(() => this.runChange(async () => {
-          this.plugin.profileManager.createCustomProfile(this.newProfileName);
-          this.newProfileName = "";
+          this.plugin.profileManager.createFromDefault();
+          this.renameValue = "";
           this.plugin.applyCustomization();
           this.refreshAllViews();
           await this.persistChange(context, true);
         })));
 
-    if (isCustom) {
-      new Setting(section)
+    const manage = section.createEl("details", { cls: "cs-subsection" });
+    manage.createEl("summary", { text: "Manage profile" });
+    {
+      new Setting(manage)
         .setName("Duplicate profile")
         .setDesc("Create an independent copy of the active profile.")
         .addButton((button) => button
@@ -360,7 +395,9 @@ class CustomizationSettingTab extends PluginSettingTab {
             await this.persistChange(context, true);
           })));
 
-      new Setting(section)
+    }
+    if(isCustom){
+      new Setting(manage)
         .setName("Rename profile")
         .addText((text) => {
           text.inputEl.maxLength = 100;
@@ -371,30 +408,17 @@ class CustomizationSettingTab extends PluginSettingTab {
         .addButton((button) => button
           .setButtonText("Rename")
           .onClick(() => this.runChange(async () => {
-            this.plugin.profileManager.renameCustomProfile(active.id, this.renameValue);
+            this.plugin.profileManager.renameCustomProfile(active.id, this.renameValue || active.name);
             this.renameValue = "";
-            this.plugin.applyCustomization();
-            this.refreshAllViews();
-            await this.persistChange(context, true);
-          })));
-    } else {
-      new Setting(section)
-        .setName("Customize built-in profile")
-        .setDesc("Make an editable copy before changing its appearance or module settings.")
-        .addButton((button) => button
-          .setButtonText("Duplicate")
-          .setCta()
-          .onClick(() => this.runChange(async () => {
-            this.plugin.profileManager.createCustomProfile(`${active.name} custom`);
             this.plugin.applyCustomization();
             this.refreshAllViews();
             await this.persistChange(context, true);
           })));
     }
 
-    new Setting(section)
+    new Setting(manage)
       .setName("Export profile")
-      .setDesc("Copy the active profile as JSON, including all module settings.")
+      .setDesc("Copy the active profile with both variants and per-shape settings. This format needs the new build.")
       .addButton((button) => button
         .setButtonText("Copy JSON")
         .onClick(() => this.runChange(async () => {
@@ -405,9 +429,14 @@ class CustomizationSettingTab extends PluginSettingTab {
             this.plugin.profileManager.exportProfile(active.id)
           );
           new Notice("Customization Studio: profile JSON copied.");
-        })));
+        })))
+      .addButton(button=>button.setButtonText("Legacy JSON").onClick(()=>this.runChange(async()=>{
+        if(!globalThis.navigator?.clipboard?.writeText)throw new Error("Clipboard access is unavailable.");
+        await globalThis.navigator.clipboard.writeText(this.plugin.profileManager.exportProfile(active.id,true));
+        new Notice("Copied the current look in legacy format. Shape settings and the other variant are not included.");
+      })));
 
-    new Setting(section)
+    new Setting(manage)
       .setName("Import profile")
       .setDesc("Paste profile JSON. Imported IDs are made unique automatically.")
       .addTextArea((text) => {
@@ -427,10 +456,10 @@ class CustomizationSettingTab extends PluginSettingTab {
           new Notice(`Customization Studio: imported "${imported.name}".`);
         })));
 
-    if (isCustom) {
-      new Setting(section)
+    if (isCustom&&active.id!==this.plugin.presentation?.state.defaultProfileId) {
+      new Setting(manage)
         .setName("Delete profile")
-        .setDesc("Switches to Minimal if this is the active profile.")
+        .setDesc("Switches to Default if this is the active profile.")
         .addButton((button) => button
           .setButtonText("Delete")
           .setWarning()
@@ -451,6 +480,7 @@ class CustomizationSettingTab extends PluginSettingTab {
       return;
     }
 
+    if(profile.studio?.neutral)section.createEl("p",{text:"Native styling is inherited until you change a control. These colors are captured from the current theme; this is not a replacement for your theme or CSS snippets."});
     this.addColorControl(section, "Accent color", profile.variables.accentColor,
       (value) => this.updateProfile({ variables: { accentColor: value } }, context));
     this.addColorControl(section, "Surface color", profile.variables.surfaceColor,
@@ -523,13 +553,12 @@ class CustomizationSettingTab extends PluginSettingTab {
         }, context)));
     new Setting(section)
       .setName("Reset global appearance")
-      .setDesc("Restores global colors and tab bar appearance to Minimal defaults.")
+      .setDesc("Returns global controls to the captured Default baseline without imposing a preset.")
       .addButton((button) => button
         .setButtonText("Reset")
-        .onClick(() => this.updateProfile({
-          variables: this.plugin.profileManager.builtInProfiles[0].variables,
-          replaceVariables: true
-        }, context, true)));
+        .onClick(() => this.plugin.presentation?this.runChange(async()=>{
+          this.plugin.presentation.resetGlobal();this.plugin.applyCustomization();this.refreshAllViews();await this.persistChange(context,true);
+        }):this.updateProfile({variables:this.plugin.profileManager.builtInProfiles[0].variables,replaceVariables:true},context,true)));
 
     const advanced = section.createEl("details", { cls: "cs-subsection" });
     advanced.createEl("summary", { text: "Advanced global CSS" });
@@ -539,9 +568,7 @@ class CustomizationSettingTab extends PluginSettingTab {
       .addTextArea((text) => {
         text.setPlaceholder("Optional profile-wide CSS").setValue(profile.customCss);
         text.inputEl.addClass("cs-code-input");
-        text.inputEl.addEventListener("blur", () => this.updateProfile({
-          customCss: text.getValue()
-        }, context));
+        text.onChange(value=>this.updateProfile({customCss:value},context));
       });
   }
 
@@ -620,24 +647,29 @@ class CustomizationSettingTab extends PluginSettingTab {
           : "Community plugin is not enabled."
     });
 
+    if(context){context.themeColorToggle=null;context.integrationEnabledToggle=null;}
+    if(profile.studio?.neutral)section.createEl("p",{text:"Untouched controls inherit native styling. Changing a control enables this integration and overrides only that control, not a preset palette."});
     if (module.compatibilityNote) section.createEl("p", { cls: "cs-compatibility-note", text: module.compatibilityNote });
 
     new Setting(section)
       .setName("Enable customization")
-      .setDesc("Turning this off removes this module's styles and observers.")
-      .addToggle((toggle) => toggle
+      .setDesc("Turning this off removes this integration's effects. Changing a control enables it again; master pause still wins.")
+      .addToggle((toggle) => { if(context)context.integrationEnabledToggle={id:module.id,toggle};return toggle
         .setValue(profile.moduleEnabled[module.id] !== false)
         .onChange((value) => this.runChange(async () => {
           this.plugin.profileManager.setModuleEnabled(module.id, value);
           await this.persistChange(context);
           this.refreshProfilePreview(context);
-        })));
+        }));});
 
     for (const group of module.controlGroups) {
       const groupEl = section.createEl("details", { cls: "cs-subsection", attr: { open: true } });
       groupEl.createEl("summary", { text: group.name });
       for (const control of group.controls) {
         this.displayControl(groupEl, module, profile, control, context);
+        if(module.id==="bases"&&control.key==="cardsShape"){
+          this.displayShapeOptions(groupEl,context);this.displayCardShapeTarget(groupEl,context);
+        }
       }
       if (module.id === "kanban" && group.name === "Columns") {
         this.displayColumnOverrides(groupEl, module, profile, context);
@@ -654,9 +686,9 @@ class CustomizationSettingTab extends PluginSettingTab {
       .addTextArea((text) => {
         text.setPlaceholder("Optional module-specific CSS").setValue(profile.modules[module.id].customCss);
         text.inputEl.addClass("cs-code-input");
-        text.inputEl.addEventListener("blur", () => this.updateModule(module.id, {
-          customCss: text.getValue()
-        }, context));
+        const change=()=>this.updateModule(module.id,{customCss:text.getValue()},context);
+        text.onChange(()=>this.queueLiveInput(text.inputEl,change));
+        text.inputEl.addEventListener("blur",()=>this.flushLiveInput(text.inputEl));
       });
 
     new Setting(section)
@@ -666,12 +698,54 @@ class CustomizationSettingTab extends PluginSettingTab {
         .setButtonText("Reset")
         .setWarning()
         .onClick(() => this.runChange(async () => {
-          this.plugin.profileManager.updateActiveProfile({
-            modules: { [module.id]: module.defaultSettings }
-          });
+          if(this.plugin.presentation)this.plugin.presentation.resetModule(module.id);
+          else this.plugin.profileManager.updateActiveProfile({modules:{[module.id]:module.defaultSettings}});
           await this.persistChange(context);
           this.refreshDisplay(context);
         })));
+  }
+
+  displayShapeOptions(containerEl,context) {
+    if(!this.plugin.presentation)return;
+    const shape=this.plugin.profileManager.getActiveProfile().modules.bases.cardsShape;
+    const options=this.plugin.presentation.getShapeOptions(shape),details=containerEl.createEl("details",{cls:"cs-subsection",attr:{open:true}});
+    details.createEl("summary",{text:`${CARD_SHAPES[shape]} settings`});
+    for(const [key,definition]of Object.entries(shapeSchema(shape))){
+      const setting=new Setting(details).setName(definition.name);
+      const description=value=>[definition.desc,key==="hover"?"Artwork only. Motion is disabled for reduced motion and touch.":"",definition.unit?`Current value: ${value}${definition.unit}`:""].filter(Boolean).join(" ");
+      setting.setDesc(description(options[key]));
+      const update=value=>this.runChange(async()=>{
+        this.plugin.presentation.setShapeOptions(shape,{[key]:value});setting.setDesc(description(value));
+        this.plugin.applyCustomization();this.refreshProfilePreview(context);await this.persistChange(context,true);
+      });
+      if(definition.options)setting.addDropdown(dropdown=>{for(const value of definition.options)dropdown.addOption(value,HOVER_EFFECTS[value]||value);dropdown.setValue(options[key]).onChange(update);});
+      else if(typeof definition.default==="boolean")setting.addToggle(toggle=>toggle.setValue(options[key]).onChange(update));
+      else setting.addSlider(slider=>slider.setLimits(definition.min,definition.max,definition.step||1).setValue(options[key]).setDynamicTooltip().onChange(update));
+    }
+    new Setting(details).setName("Reset this shape").addButton(button=>button.setButtonText("Reset").onClick(()=>this.runChange(async()=>{
+      this.plugin.presentation.resetShape(shape);this.plugin.applyCustomization();this.refreshAllViews();await this.persistChange(context,true);
+    })));
+  }
+
+  displayCardShapeTarget(containerEl, context) {
+    const controller = this.plugin.moduleManager.controllers?.get("bases");
+    const views = controller?.getShapeViews?.() || [];
+    new Setting(containerEl)
+      .setName("Temporary shape target")
+      .setDesc("Select one open cards pane. Other Bases panes stay unchanged. Selection is not saved: reselect after restart, profile changes, reopening, or a detected cards-layout replacement. This is pane-scoped preview, not a persistent saved-view rule.")
+      .addDropdown((dropdown) => {
+        dropdown.addOption("", "None (do not apply shapes)");
+        for (const view of views) dropdown.addOption(view.id, view.name);
+        dropdown.setValue(controller?.shapeTarget?.id || "").onChange((id) => this.runChange(async () => {
+          controller?.selectShapeTarget(id);
+          this.refreshOtherViews(context);
+        }));
+      })
+      .addButton((button) => button.setButtonText("Refresh panes").onClick(() => {
+        this.plugin.moduleManager.refreshWithNotice?.();
+        this.refreshDisplay(context);
+      }));
+    containerEl.createEl("p", { cls: "cs-compatibility-note", text: "Shapes use Bases card-cover classes. Check your real vault, embeds and mobile before relying on them. Metadata stays outside the cover. No notes or cover images are changed." });
   }
 
   displayControl(containerEl, module, profile, control, context) {
@@ -680,11 +754,14 @@ class CustomizationSettingTab extends PluginSettingTab {
     const setting = new Setting(containerEl).setName(control.name);
     if (control.desc) setting.setDesc(control.desc);
     else if (control.unit) setting.setDesc(`Current value: ${value}${control.unit}`);
-    const update = (next) => this.updateModule(module.id, { [control.key]: next }, context);
+    const update = async(next) => {
+      if(control.unit)setting.setDesc(`Current value: ${next}${control.unit}`);
+      await this.updateModule(module.id, { [control.key]: next }, context,module.id==="bases"&&control.key==="cardsShape");
+    };
     if (control.type === "color") {
       setting.addColorPicker((picker) => picker.setValue(value).onChange(update));
     } else if (control.type === "boolean") {
-      setting.addToggle((toggle) => toggle.setValue(value).onChange(update));
+      setting.addToggle((toggle) => {if(control.key==="useThemeColors"&&context)context.themeColorToggle={id:module.id,toggle};return toggle.setValue(value).onChange(update);});
     } else if (control.type === "range") {
       setting.addSlider((slider) => slider
         .setLimits(schema.min, schema.max, schema.step || 1)
@@ -693,14 +770,16 @@ class CustomizationSettingTab extends PluginSettingTab {
         .onChange(update));
     } else if (control.type === "select") {
       setting.addDropdown((dropdown) => {
-        for (const option of schema.options) dropdown.addOption(option, option);
+        for (const option of schema.options) dropdown.addOption(option, module.id === "bases" && control.key === "cardsShape" ? CARD_SHAPES[option] : option);
         dropdown.setValue(value).onChange(update);
       });
     } else if (control.type === "text") {
       setting.addText((text) => {
         text.setPlaceholder("Assets/cover.jpg or https://example.com/cover.jpg").setValue(value);
         text.inputEl.type = "text";
-        text.inputEl.addEventListener("blur", () => update(text.getValue().trim()));
+        const change=()=>update(text.getValue().trim());
+        text.onChange(()=>this.queueLiveInput(text.inputEl,change));
+        text.inputEl.addEventListener("blur",()=>this.flushLiveInput(text.inputEl));
       });
     }
   }
@@ -752,16 +831,20 @@ class CustomizationSettingTab extends PluginSettingTab {
     });
   }
 
-  updateModule(moduleId, update, context) {
+  updateModule(moduleId, update, context,refreshAfter=false) {
     return this.runChange(async () => {
       this.plugin.profileManager.updateModuleSettings(moduleId, update);
       this.plugin.applyCustomization();
       this.refreshProfilePreview(context);
+      if(refreshAfter)this.refreshDisplay(context);
       await this.persistChange(context, true);
     });
   }
 
   refreshProfilePreview(context) {
+    const selected=this.plugin.profileManager.getActiveProfile();
+    if(context?.integrationEnabledToggle){const {id,toggle}=context.integrationEnabledToggle;toggle.setValue(selected.moduleEnabled[id]!==false);}
+    if(context?.themeColorToggle){const {id,toggle}=context.themeColorToggle;toggle.setValue(selected.modules[id].useThemeColors);}
     if (!context?.preview) return;
     const profile = this.plugin.profileManager.getActiveProfile();
     context.preview.name.textContent = profile.name;
@@ -782,7 +865,7 @@ class CustomizationSettingTab extends PluginSettingTab {
       .filter((module) => profile.moduleEnabled[module.id] !== false)
       .map((module) => module.name);
     context.preview.moduleSummary.textContent = enabledModules.length
-      ? `Enabled modules: ${enabledModules.join(", ")}`
+      ? `${this.plugin.settingsManager.settings.customizationEnabled === false ? "Configured" : "Enabled"} modules: ${enabledModules.join(", ")}`
       : "No modules enabled.";
     context.preview.name.parentElement?.setAttribute(
       "aria-label",

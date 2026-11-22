@@ -34,6 +34,7 @@ var __commonJS = (cb, mod) => function __require() {
 var require_settings_manager = __commonJS({
   "core/settings-manager.js"(exports2, module2) {
     var DEFAULT_SETTINGS = {
+      customizationEnabled: true,
       activeProfileId: "minimal",
       customProfiles: [],
       moduleEnabled: {},
@@ -92,6 +93,10 @@ var require_settings_manager = __commonJS({
         if (typeof data !== "object" || Array.isArray(data)) {
           throw new Error("Customization Studio settings must be a JSON object.");
         }
+        const customizationEnabled = data.customizationEnabled ?? true;
+        if (typeof customizationEnabled !== "boolean") {
+          throw new Error("Customization Studio customizationEnabled must be a boolean.");
+        }
         const customProfiles = data.customProfiles ?? [];
         const moduleEnabled = data.moduleEnabled ?? {};
         const activeProfileId = data.activeProfileId ?? DEFAULT_SETTINGS.activeProfileId;
@@ -111,6 +116,7 @@ var require_settings_manager = __commonJS({
         }
         this.settings = {
           ...DEFAULT_SETTINGS,
+          customizationEnabled,
           activeProfileId,
           customProfiles,
           moduleEnabled: { ...moduleEnabled },
@@ -144,9 +150,10 @@ var require_settings_manager = __commonJS({
         }
         if (!this.dirty) return;
         const snapshot = JSON.parse(JSON.stringify(this.settings));
+        const appearanceSnapshot = this.plugin.presentation?.snapshot();
         const savedRevision = this.revision;
         this.dirty = false;
-        const pending = this.saveQueue.catch(() => void 0).then(() => this.plugin.saveData(snapshot));
+        const pending = this.saveQueue.catch(() => void 0).then(() => this.plugin.presentation ? this.plugin.presentation.save(snapshot, appearanceSnapshot) : this.plugin.saveData(snapshot));
         this.saveQueue = pending;
         this.flushPromise = pending;
         try {
@@ -400,9 +407,101 @@ var require_settings = __commonJS({
   }
 });
 
+// core/selective-styles.js
+var require_selective_styles = __commonJS({
+  "core/selective-styles.js"(exports2, module2) {
+    function blocks(css, context = [], result = /* @__PURE__ */ new Map()) {
+      let cursor = 0;
+      while (cursor < css.length) {
+        const open = css.indexOf("{", cursor);
+        if (open < 0) break;
+        const selector = css.slice(cursor, open).trim();
+        let end = open + 1, depth = 1, quote = null;
+        for (; end < css.length; end++) {
+          const c = css[end];
+          if (quote) {
+            if (c === "\\") end++;
+            else if (c === quote) quote = null;
+          } else if (c === '"' || c === "'") quote = c;
+          else if (c === "{") depth++;
+          else if (c === "}" && !--depth) break;
+        }
+        const body = css.slice(open + 1, end);
+        if (selector.startsWith("@")) blocks(body, [...context, selector], result);
+        else {
+          let start = 0, parens = 0;
+          quote = null;
+          for (let i = 0; i <= body.length; i++) {
+            const c = body[i];
+            if (quote) {
+              if (c === "\\") i++;
+              else if (c === quote) quote = null;
+              continue;
+            }
+            if (c === '"' || c === "'") {
+              quote = c;
+              continue;
+            }
+            if (c === "(") parens++;
+            if (c === ")") parens--;
+            if (c === ";" && parens === 0 || i === body.length) {
+              const declaration = body.slice(start, i).trim(), colon = declaration.indexOf(":");
+              if (colon > 0) {
+                const property = declaration.slice(0, colon).trim(), value = declaration.slice(colon + 1).trim(), key = JSON.stringify([context, selector, property]);
+                result.set(key, { context, selector, property, value });
+              }
+              start = i + 1;
+            }
+          }
+        }
+        cursor = end + 1;
+      }
+      return result;
+    }
+    function alternative(definition, current) {
+      if (definition.type === "boolean") return !current;
+      if (definition.type === "color") return current === "#010203" ? "#a1b2c3" : "#010203";
+      if (definition.type === "range") return current === definition.min ? definition.max : definition.min;
+      if (definition.type === "select") return definition.options.find((v) => v !== current);
+      if (definition.type === "colorMap") return {};
+      return current ? "" : "test";
+    }
+    function selectiveStyles(module3, settings, controller, keys) {
+      if (!keys.length) return "";
+      const actual = blocks(module3.styles(settings, controller)), keep = /* @__PURE__ */ new Set();
+      for (const key of keys) {
+        const definition = module3.settingsSchema[key];
+        if (!definition || key === "customCss" || key === "cardsShape") continue;
+        const changed = { ...settings, [key]: alternative(definition, settings[key]) };
+        const shadow = Object.create(controller);
+        if (key === "backgroundImage") shadow.resolvedBackgroundImage = changed.backgroundImage;
+        const other = blocks(module3.styles(changed, shadow));
+        for (const [id, entry] of actual) if (!other.has(id) || other.get(id).value !== entry.value) keep.add(id);
+        if (key === "columnColors" || key === "automaticColumnColors") {
+          for (const [id, entry] of actual) if (entry.selector.includes("data-cs-kanban-column")) keep.add(id);
+        }
+      }
+      let expanded = true;
+      while (expanded) {
+        expanded = false;
+        for (const id of [...keep]) {
+          const entry = actual.get(id);
+          for (const match of entry.value.matchAll(/var\((--[a-z0-9-]+)/gi)) for (const [dependency, item] of actual) if (item.property === match[1] && !keep.has(dependency)) {
+            keep.add(dependency);
+            expanded = true;
+          }
+        }
+      }
+      return [...actual].filter(([id]) => keep.has(id)).map(([, e]) => e.context.reduceRight((text, at) => `${at}{${text}}`, `${e.selector}{${e.property}:${e.value};}`)).join("\n");
+    }
+    module2.exports = { selectiveStyles, blocks };
+  }
+});
+
 // modules/base-controller.js
 var require_base_controller = __commonJS({
   "modules/base-controller.js"(exports2, module2) {
+    var { selectiveStyles } = require_selective_styles();
     var BaseModuleController = class {
       constructor(plugin, manager, module3) {
         this.plugin = plugin;
@@ -421,7 +520,7 @@ var require_base_controller = __commonJS({
       refresh(profile) {
         this.profile = profile;
         this.settings = this.module.validateSettings(profile.modules[this.module.id]);
-        if (profile.moduleEnabled[this.module.id] === false || !this.manager.isTargetPluginEnabled(this.module)) {
+        if (this.plugin.settingsManager?.settings.customizationEnabled === false || profile.moduleEnabled[this.module.id] === false || !this.manager.isTargetPluginEnabled(this.module)) {
           this.deactivate();
           return;
         }
@@ -456,7 +555,7 @@ var require_base_controller = __commonJS({
           return;
         }
         const observer = new Observer(() => this.scheduleApply(root));
-        observer.observe(root, { childList: true, subtree: true, characterData: true });
+        observer.observe(root, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ["style", "src"] });
         this.roots.set(root, observer);
       }
       scheduleApply(root) {
@@ -476,8 +575,11 @@ var require_base_controller = __commonJS({
             this.styles.delete(doc);
           }
         }
-        const css = `${this.module.styles(this.settings, this)}
-${this.module.customCss(this.settings, this)}`;
+        const keys = this.profile?.studio?.moduleKeys[this.module.id] || [];
+        const base = this.profile?.studio?.neutral ? selectiveStyles(this.module, this.settings, this, keys) : this.module.styles(this.settings, this);
+        const css = `${base}
+${this.module.customCss(this.settings, this)}
+${this.additionalStyles?.() || ""}`;
         for (const doc of documents) {
           let style = this.styles.get(doc);
           if (!style?.parentNode) {
@@ -622,6 +724,12 @@ var require_controller = __commonJS({
         }
       }
       updateColumnDecorations(roots) {
+        const keys = this.profile?.studio?.moduleKeys.kanban || [];
+        if (this.profile?.studio?.neutral && !keys.some((key) => ["columnColors", "automaticColumnColors"].includes(key))) {
+          for (const [element, record] of this.markedColumns) this.restoreColumnMarker(element, record);
+          this.columnColorTokens.clear();
+          return;
+        }
         const active = /* @__PURE__ */ new Set();
         const colorTokens = /* @__PURE__ */ new Map();
         for (const root of roots) {
@@ -647,7 +755,7 @@ var require_controller = __commonJS({
         const normalized = title.trim().toLowerCase();
         const manual = Object.entries(this.settings.columnColors).find(([name]) => name.trim().toLowerCase() === normalized)?.[1];
         if (manual) return manual;
-        if (!this.settings.automaticColumnColors) return null;
+        if (!this.settings.automaticColumnColors || this.profile?.studio?.neutral && !this.profile.studio.moduleKeys.kanban?.includes("automaticColumnColors")) return null;
         return AUTOMATIC_COLORS.find(({ words }) => words.includes(normalized))?.color || null;
       }
       setColumnMarker(element) {
@@ -1154,11 +1262,177 @@ var require_spaced_repetition = __commonJS({
   }
 });
 
+// modules/bases/shape-options.js
+var require_shape_options = __commonJS({
+  "modules/bases/shape-options.js"(exports2, module2) {
+    var HOVER_EFFECTS = Object.freeze({ off: "Off", glow: "Glow", lift: "Lift", flip: "Flip artwork", wiggle: "Wiggle" });
+    var COMMON = { size: { name: "Artwork size", min: 50, max: 150, step: 1, default: 100, unit: "%", desc: "Uses native card sizing so artwork gets bigger or smaller without scaling or hiding the text." }, hover: { name: "Hover effect", options: Object.keys(HOVER_EFFECTS), default: "off" } };
+    var SHAPE_CONTROLS = {
+      standard: {},
+      book: { angle: { name: "Book depth", min: 0, max: 20, default: 12, unit: "\xB0" }, pages: { name: "Page-edge thickness", min: 0, max: 12, default: 7, unit: "px" }, detail: { name: "Page-line spacing", min: 1, max: 4, step: 0.5, default: 2, unit: "px", desc: "Decorative page lines, not the note's actual page count." } },
+      poster: { frame: { name: "Print border", min: 1, max: 16, default: 7, unit: "px" }, shadow: { name: "Print shadow", min: 0, max: 100, default: 40, unit: "%" } },
+      circle: { diameter: { name: "Circle diameter", min: 60, max: 100, default: 100, unit: "%" }, crop: { name: "Vertical crop position", min: 0, max: 100, default: 50, unit: "%" } },
+      spine: { angle: { name: "Closed spine angle", min: 40, max: 80, default: 72, unit: "\xB0" }, reveal: { name: "Reveal on hover or focus", default: true, desc: "Touch devices always show full covers." } },
+      polaroid: { tilt: { name: "Print tilt", min: -6, max: 6, default: -2, unit: "\xB0" }, bottom: { name: "Lower border", min: 8, max: 45, default: 30, unit: "px" } },
+      "trading-card": { frame: { name: "Metallic border", min: 1, max: 14, default: 6, unit: "px" }, sheen: { name: "Sheen strength", min: 0, max: 50, default: 20, unit: "%" } },
+      disc: { protrusion: { name: "Disc protrusion", min: 0, max: 55, default: 34, unit: "%" }, diameter: { name: "Disc diameter", min: 60, max: 96, default: 92, unit: "%" } },
+      ticket: { notch: { name: "Notch radius", min: 0, max: 14, default: 9, unit: "px" }, perforation: { name: "Perforated edges", default: true } }
+    };
+    function shapeSchema(shape) {
+      if (!Object.hasOwn(SHAPE_CONTROLS, shape)) throw new Error("Unknown card shape.");
+      return { ...COMMON, ...SHAPE_CONTROLS[shape] };
+    }
+    function validateShapeOptions(shape, value = {}) {
+      if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("Shape options must be an object.");
+      const schema = shapeSchema(shape), result = {};
+      for (const key of Object.keys(value)) if (!Object.hasOwn(schema, key)) throw new Error(`Unknown ${shape} option: ${key}.`);
+      for (const [key, definition] of Object.entries(schema)) {
+        const current = value[key] ?? definition.default;
+        if (definition.options ? !definition.options.includes(current) : typeof definition.default === "boolean" ? typeof current !== "boolean" : typeof current !== "number" || !Number.isFinite(current) || current < definition.min || current > definition.max) throw new Error(`Invalid ${shape} ${key}.`);
+        result[key] = current;
+      }
+      return result;
+    }
+    module2.exports = { HOVER_EFFECTS, shapeSchema, validateShapeOptions };
+  }
+});
+
+// modules/bases/card-shapes.js
+var require_card_shapes = __commonJS({
+  "modules/bases/card-shapes.js"(exports2, module2) {
+    var { validateShapeOptions } = require_shape_options();
+    var CARD_SHAPES = Object.freeze({
+      standard: "Standard",
+      book: "Book",
+      poster: "Poster",
+      circle: "Circle",
+      spine: "Spine",
+      polaroid: "Polaroid",
+      "trading-card": "Trading card",
+      disc: "Disc",
+      ticket: "Ticket"
+    });
+    var SHAPE_ATTRIBUTE = "data-cs-bases-shape";
+    function cardShapeStyles(shape, targetToken = "preview", inputOptions = {}, cardsScale = 1) {
+      const options = validateShapeOptions(shape, inputOptions);
+      if (shape === "standard" && options.size === 100 && options.hover === "off") return "";
+      if (!Object.hasOwn(CARD_SHAPES, shape)) throw new Error("Unknown Bases card shape.");
+      if (!/^cs-view-[0-9]+$|^preview$/.test(targetToken)) throw new Error("Invalid shape target token.");
+      const root = `.bases-view[data-cs-bases-shape-target="${targetToken}"][${SHAPE_ATTRIBUTE}="${shape}"]`;
+      const card = `${root} .bases-cards-item`;
+      const cover = `${card} .bases-cards-cover`;
+      const effects = {
+        standard: "",
+        book: `${cover} {
+      container-type: size;
+      --cs-book-width: min(90cqw, 56cqh);
+      --cs-book-height: min(135cqw, 84cqh);
+      --cs-book-shadow: #18382b30;
+      background-size: 0 0 !important;
+      background-color: transparent;
+    }
+    .theme-dark ${cover} { --cs-book-shadow: #0007; }
+    ${cover}::before, ${cover} img {
+      width: var(--cs-book-width); height: var(--cs-book-height);
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%) perspective(800px) rotateY(-${options.angle || 0}deg);
+      border-radius: 2px 5px 5px 2px;
+    }
+    ${cover} img { position: absolute; object-fit: contain; z-index: 0; }
+    ${cover}::before {
+      background-image: inherit; background-size: contain; background-position: center; background-repeat: no-repeat;
+      z-index: 1;
+      box-shadow: 8px 11px 12px var(--cs-book-shadow), inset 0 0 0 1px #0003,
+        inset 3px 0 1px #ffffff35, inset 8px 0 4px -4px #0009;
+    }
+    ${cover}::after {
+      top: calc((100% - var(--cs-book-height)) / 2 + 3px);
+      left: calc((100% + var(--cs-book-width)) / 2 - 2px);
+      height: calc(var(--cs-book-height) - 5px); width: ${options.pages}px;
+      ${options.pages === 0 ? "display: none;" : ""}
+      transform: perspective(800px) rotateY(30deg); transform-origin: left;
+      border: 1px solid #b9ad94; border-left: 0; z-index: 0;
+      background: repeating-linear-gradient(#ede4d1 0 ${options.detail / 2}px, #c9bfa8 ${options.detail / 2}px ${options.detail}px);
+      box-shadow: 2px 2px 1px #4b3e2e40;
+    }`,
+        poster: `${cover} { border: ${options.frame}px solid #faf8ef; outline: 1px solid #7775;
+      box-shadow: 0 5px 12px rgba(0,0,0,${options.shadow / 200}); border-radius: 0; }`,
+        circle: `${cover} { scale: ${options.diameter / 100}; border-radius: 50%; clip-path: circle(closest-side); overflow: hidden;
+      background-size: cover !important; background-position: center ${options.crop}% !important; border: 3px solid var(--background-secondary);
+      box-shadow: 0 3px 10px #0003; }
+    ${cover} img { object-fit: cover; object-position: center ${options.crop}%; border-radius: 50%; }`,
+        spine: `${card} { perspective: 850px; }
+    ${cover} { transform: scale(.8) rotateY(-${options.angle}deg); transform-origin: 20% center;
+      border-radius: 2px 5px 5px 2px; box-shadow: 7px 5px 9px #0004;
+      transition: transform 180ms ease; }
+    ${cover}::before { inset: 0; background: linear-gradient(90deg, #0006, #fff4 8%, transparent 18%); }
+    ${options.reveal ? `${card}:is(:hover, :focus-within) .bases-cards-cover { transform: none; }` : ""}
+    ${cover}:dir(rtl) { transform: scale(.8) rotateY(${options.angle}deg); transform-origin: 80% center; }
+    ${options.reveal ? `${card}:dir(rtl):is(:hover, :focus-within) .bases-cards-cover { transform: none; }` : ""}
+    @media (hover: none), (pointer: coarse) { ${cover}, ${cover}:dir(rtl) { transform: none; } }`,
+        polaroid: `${cover} { border: 8px solid #fffdf7; border-block-end-width: ${options.bottom}px;
+      border-radius: 1px; transform: rotate(${options.tilt}deg); box-shadow: 0 4px 10px #0003; }
+    ${cover}:dir(rtl) { transform: rotate(${-options.tilt}deg); }
+`,
+        "trading-card": `${cover} { border: ${options.frame}px solid #bca269; border-radius: 9px;
+      outline: 1px solid #67542b; box-shadow: 0 3px 10px #0004; }
+    ${cover}::before { inset: -4px; border-radius: 7px; border: 1px solid #fff9;
+      background: linear-gradient(125deg, transparent 22%, rgba(255,255,255,${options.sheen / 100}) 33%, transparent 44%, transparent 65%, #8ad3dd33 78%, transparent); }`,
+        disc: `${card} { isolation: isolate; }
+    ${cover} { isolation: auto; container-type: size; width: 82%;
+      border: 1px solid #7775; border-radius: 1px; box-shadow: 0 3px 8px #0004; }
+    ${cover}::after { width: min(${options.diameter}cqw, ${options.diameter}cqh); height: min(${options.diameter}cqw, ${options.diameter}cqh); inset-inline-start: ${options.protrusion}%; top: 4%;
+      border-radius: 50%; z-index: -1;
+      background: radial-gradient(circle, var(--background-primary) 0 4%, #d1b685 4% 16%, #27272b 16% 18%, transparent 18%),
+        repeating-radial-gradient(circle, #161619 0 2px, #34343b 2px 3px, #17171b 3px 5px);
+      box-shadow: 2px 3px 7px #0004; }
+    ${cover} img { border-radius: 0; }`,
+        ticket: `${cover} { border-block: 3px solid var(--background-modifier-border);
+      border-inline: 2px ${options.perforation ? "dashed" : "solid"} var(--text-muted); border-radius: 9px; }
+    ${cover}::before, ${cover}::after { width: ${options.notch * 2}px; height: ${options.notch * 2}px; top: calc(66% - ${options.notch}px);
+      border-radius: 50%; background: var(--background-primary); }
+    ${cover}::before { inset-inline-start: -${options.notch + 2}px; }
+    ${cover}::after { inset-inline-end: -${options.notch + 2}px; }`
+      };
+      const bookFallback = shape === "book" ? `${cover} { background-size: contain !important; }
+    ${cover}::before, ${cover}::after { display: none; }
+    ${cover} img { width: 100%; height: 100%; top: 0; left: 0; transform: none; object-fit: contain; }` : "";
+      const motionName = `cs-${targetToken}-${shape}-${options.hover}`;
+      const animations = { flip: `@keyframes ${motionName}{from{rotate:y 0deg}to{rotate:y 360deg}}`, wiggle: `@keyframes ${motionName}{0%,100%{rotate:0deg}25%{rotate:2deg}75%{rotate:-2deg}}`, lift: "" };
+      let hover = "";
+      if (options.hover !== "off") {
+        const effect = options.hover === "glow" ? "filter: drop-shadow(0 0 7px var(--interactive-accent));" : options.hover === "lift" ? "translate: 0 -4px;" : `animation: ${motionName} ${options.hover === "flip" ? "650" : "360"}ms ease 1;`;
+        hover = `${animations[options.hover] || ""}@media(hover:hover) and (pointer:fine){${card}:is(:hover,:focus-within) .bases-cards-cover{${effect}}}`;
+      }
+      const sizing = options.size === 100 ? "" : `${root}{--bases-cards-scale:${cardsScale * options.size / 100};}`;
+      if (shape === "standard") return `${sizing}${hover}@media(prefers-reduced-motion:reduce){${cover}{animation:none!important;translate:none!important;rotate:none!important;}}`;
+      return `${sizing}${card} { overflow: visible; }
+${cover} { box-sizing: border-box; isolation: isolate; overflow: visible; background-size: contain;
+  background-position: center; background-repeat: no-repeat;
+  background-color: var(--background-secondary); }
+${cover} img { width: 100%; height: 100%; object-fit: contain; display: block; }
+${cover}::before, ${cover}::after { content: ""; position: absolute; pointer-events: none; }
+${card} .bases-cards-property { z-index: 1; }
+${card}:focus-within { outline: 2px solid var(--interactive-accent); outline-offset: 4px; }
+${effects[shape]}
+${hover}
+@media (prefers-reduced-motion: reduce) { ${cover} { transition: none !important; animation: none !important; rotate: none !important; translate: none !important; } }
+@media (forced-colors: active) { ${cover} { border: 1px solid CanvasText; box-shadow: none; }
+  ${cover}::before, ${cover}::after { display: none; } ${bookFallback} }
+${shape === "book" ? `@supports not (container-type: size) { ${bookFallback} }` : ""}
+`;
+    }
+    module2.exports = { CARD_SHAPES, SHAPE_ATTRIBUTE, cardShapeStyles };
+  }
+});
+
 // modules/bases/settings.js
 var require_settings3 = __commonJS({
   "modules/bases/settings.js"(exports2, module2) {
     var { createDefaults, validateSettings } = require_settings_utils();
+    var { CARD_SHAPES } = require_card_shapes();
     var SCHEMA = {
+      cardsShape: { type: "select", default: "standard", options: Object.keys(CARD_SHAPES) },
       tableTextSize: { type: "range", default: 14, min: 10, max: 24 },
       tableRowHeight: { type: "range", default: 36, min: 24, max: 80 },
       tableMinColumnWidth: { type: "range", default: 40, min: 24, max: 320 },
@@ -1215,6 +1489,7 @@ var require_settings3 = __commonJS({
       {
         name: "Cards and gallery",
         controls: [
+          { key: "cardsShape", name: "Card shape", type: "select", desc: "Standard keeps native artwork unless you change its size or hover effect. Shape edits use the active or sole visible cards pane; choose Temporary shape target if ambiguous. This is session/pane scoped. Circle crops artwork; Spine has a separate reveal control and stays open on touch." },
           { key: "cardsContainerBackground", name: "Gallery background", type: "color" },
           { key: "cardsBackground", name: "Card background", type: "color" },
           { key: "cardsCoverBackground", name: "Cover background", type: "color" },
@@ -1255,7 +1530,9 @@ var require_settings3 = __commonJS({
 var require_controller3 = __commonJS({
   "modules/bases/controller.js"(exports2, module2) {
     var { BaseModuleController } = require_base_controller();
-    function styles(settings) {
+    var { cardShapeStyles, SHAPE_ATTRIBUTE } = require_card_shapes();
+    var nextShapeTargetToken = 0;
+    function styles(settings, controller) {
       const shadowAlpha = settings.cardsShadow / 100;
       const cardShadow = `0 3px 12px rgba(0, 0, 0, ${shadowAlpha * 0.25})`;
       const hoverShadow = `0 8px 24px rgba(0, 0, 0, ${shadowAlpha * 0.4})`;
@@ -1288,9 +1565,116 @@ var require_controller3 = __commonJS({
   --bases-cards-border-width: ${settings.cardsBorderWidth}px;
   --bases-cards-shadow: ${cardShadow};
   --bases-cards-shadow-hover: ${hoverShadow};
-}`;
+}
+`;
     }
     var BasesController = class extends BaseModuleController {
+      constructor(...args) {
+        super(...args);
+        this.shapeTarget = null;
+        this.shapeViews = /* @__PURE__ */ new Map();
+        this.nextShapeViewId = 0;
+      }
+      additionalStyles() {
+        if (!this.shapeTarget?.written) return "";
+        const options = this.plugin.presentation?.getShapeOptions(this.settings.cardsShape) || {};
+        const keys = this.profile?.studio?.moduleKeys.bases || [];
+        const scale = this.profile?.studio?.neutral && !keys.includes("cardsScale") ? this.shapeTarget.baseScale : this.settings.cardsScale;
+        return cardShapeStyles(this.settings.cardsShape, this.shapeTarget.token, options, scale || 1);
+      }
+      autoSelectShapeTarget() {
+        if (this.shapeTarget) return;
+        const workspace = this.plugin.app.workspace, leaf = workspace.getMostRecentLeaf?.() || workspace.activeLeaf;
+        const views = [...this.shapeViews].filter(([, root]) => root.querySelector(".bases-cards-group") && (!root.getClientRects || root.getClientRects().length));
+        const selected = views.find(([, root]) => leaf?.view?.containerEl?.contains(root)) || (views.length === 1 ? views[0] : null);
+        if (selected) this.selectShapeTarget(selected[0]);
+        else this.plugin.notifyUser?.("Choose the cards pane under Temporary shape target so the change applies to the right pane.");
+      }
+      onRootsUpdated(roots) {
+        const known = new Set(this.shapeViews.values());
+        for (const [id, root] of this.shapeViews) if (!roots.has(root)) this.shapeViews.delete(id);
+        for (const root of roots) {
+          if (!known.has(root)) this.shapeViews.set(`view-${++this.nextShapeViewId}`, root);
+        }
+        this.syncShapeTarget();
+      }
+      getShapeViews() {
+        return [...this.shapeViews].filter(([, root]) => root.querySelector(".bases-cards-group")).map(([id, root], index) => {
+          let name = `Open Bases cards pane ${index + 1}`;
+          this.plugin.app.workspace.iterateAllLeaves?.((leaf) => {
+            if (leaf.view?.containerEl?.contains(root)) {
+              const displayName = leaf.view.getDisplayText?.();
+              if (typeof displayName === "string" && displayName.trim()) name = displayName;
+            }
+          });
+          return { id, name: `${name} (${index + 1})` };
+        });
+      }
+      selectShapeTarget(id) {
+        this.clearShapeTarget();
+        if (!id) {
+          this.updateStyle();
+          return;
+        }
+        const root = this.shapeViews.get(id);
+        const group = root?.querySelector(".bases-cards-group");
+        if (!root || !this.roots.has(root) || !group || !this.plugin.profileManager.customProfiles.some((p) => p.id === this.profile.id)) {
+          throw new Error("Choose an open Bases cards pane while a custom profile is active.");
+        }
+        if (root.getAttribute(SHAPE_ATTRIBUTE) !== null || root.getAttribute("data-cs-bases-shape-target") !== null) throw new Error("This view already has an external shape marker.");
+        const baseScale = parseFloat(root.ownerDocument.defaultView?.getComputedStyle?.(root).getPropertyValue("--bases-cards-scale")) || 1;
+        this.shapeTarget = { id, root, group, baseScale, profileId: this.profile.id, written: null, token: `cs-view-${++nextShapeTargetToken}` };
+        root.setAttribute("data-cs-bases-shape-target", this.shapeTarget.token);
+        this.syncShapeTarget();
+        this.updateStyle();
+      }
+      syncShapeTarget() {
+        const target = this.shapeTarget;
+        if (!target) return;
+        if (target.profileId !== this.profile?.id || !this.roots.has(target.root) || target.root.querySelector(".bases-cards-group") !== target.group) {
+          this.clearShapeTarget();
+          return;
+        }
+        if (target.root.getAttribute("data-cs-bases-shape-target") !== target.token) {
+          this.clearShapeTarget();
+          return;
+        }
+        const existing = target.root.getAttribute(SHAPE_ATTRIBUTE);
+        if (existing !== target.written) {
+          this.clearShapeTarget();
+          return;
+        }
+        const options = this.plugin.presentation?.getShapeOptions(this.settings.cardsShape);
+        if (this.settings.cardsShape === "standard" && (!options || options.size === 100 && options.hover === "off")) {
+          target.root.removeAttribute(SHAPE_ATTRIBUTE);
+          target.written = null;
+        } else {
+          target.written = this.settings.cardsShape;
+          target.root.setAttribute(SHAPE_ATTRIBUTE, target.written);
+        }
+      }
+      clearShapeTarget() {
+        const target = this.shapeTarget;
+        if (target?.written && target.root.getAttribute(SHAPE_ATTRIBUTE) === target.written) {
+          target.root.removeAttribute(SHAPE_ATTRIBUTE);
+        }
+        if (target && target.root.getAttribute("data-cs-bases-shape-target") === target.token) {
+          target.root.removeAttribute("data-cs-bases-shape-target");
+        }
+        this.shapeTarget = null;
+      }
+      onDomChanged() {
+        this.syncShapeTarget();
+      }
+      onRootRemoved(root) {
+        if (this.shapeTarget?.root === root) this.clearShapeTarget();
+        for (const [id, view] of this.shapeViews) if (view === root) this.shapeViews.delete(id);
+      }
+      deactivate() {
+        this.clearShapeTarget();
+        this.shapeViews.clear();
+        super.deactivate();
+      }
       refresh(profile) {
         super.refresh(profile);
         if (!this.settings.diagnostics) return;
@@ -1968,13 +2352,15 @@ var require_profile_manager = __commonJS({
         return recoveredActiveProfile;
       }
       getProfiles() {
-        return [...this.builtInProfiles, ...this.customProfiles];
+        const result = [...this.builtInProfiles, ...this.customProfiles];
+        const id = this.presentation?.state.defaultProfileId;
+        return id ? [...result.filter((p) => p.id === id), ...result.filter((p) => p.id !== id)] : result;
       }
       getProfile(id) {
         return this.getProfiles().find((profile) => profile.id === id);
       }
       getActiveProfile() {
-        return this.getProfile(this.settingsManager.settings.activeProfileId);
+        return this.presentation?.resolveProfile(this.settingsManager.settings.activeProfileId) || this.getProfile(this.settingsManager.settings.activeProfileId);
       }
       makeUniqueId(requestedId) {
         const normalized = requestedId.toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 64);
@@ -1994,17 +2380,36 @@ var require_profile_manager = __commonJS({
         } catch (error) {
           throw new Error(`Profile JSON is invalid: ${error.message}`);
         }
+        let appearance;
+        if (parsed?.format === "customization-studio-profile") {
+          if (parsed.version !== 2 || !this.presentation) throw new Error("This profile needs the new appearance-enabled build.");
+          appearance = parsed.appearance;
+          if (!appearance || typeof appearance !== "object" || Array.isArray(appearance)) throw new Error("The imported profile is missing its appearance settings.");
+          parsed = parsed.profile;
+        }
         const imported = validateProfile(parsed, this.knownModules);
+        if (appearance) {
+          for (const mode of ["light", "dark"]) for (const variant of [appearance.variants?.[mode], appearance.baseline?.[mode]]) {
+            if (!variant) throw new Error("Missing imported light/dark variant.");
+            validateProfile({ ...imported, variables: variant.variables, modules: variant.modules }, this.knownModules);
+          }
+          this.presentation.validateState({ version: 1, defaultProfileId: null, profiles: { [imported.id]: appearance } });
+        }
         const id = this.makeUniqueId(imported.id);
         const profile = { ...imported, id };
         this.customProfiles.push(profile);
+        if (this.presentation) this.presentation.state.profiles[id] = appearance ? JSON.parse(JSON.stringify(appearance)) : this.presentation.newMeta(profile, false);
         this.settingsManager.settings.customProfiles = this.customProfiles;
         this.settingsManager.settings.activeProfileId = profile.id;
         return profile;
       }
-      exportProfile(id) {
+      exportProfile(id, legacy = false) {
         const profile = this.getProfile(id);
         if (!profile) throw new Error(`Unknown profile "${id}".`);
+        if (this.presentation) {
+          const current = this.presentation.resolveProfile(id), clean = this.presentation.legacyData({ customProfiles: [current] }).customProfiles[0];
+          return JSON.stringify(legacy ? clean : { format: "customization-studio-profile", version: 2, profile: clean, appearance: this.presentation.meta(id) }, null, 2);
+        }
         return JSON.stringify(profile, null, 2);
       }
       createCustomProfile(name, sourceId = this.getActiveProfile().id) {
@@ -2019,9 +2424,27 @@ var require_profile_manager = __commonJS({
           name: trimmedName
         }, this.knownModules);
         this.customProfiles.push(profile);
+        this.presentation?.cloneProfile(sourceId, profile.id);
         this.settingsManager.settings.customProfiles = this.customProfiles;
         this.settingsManager.settings.activeProfileId = profile.id;
         return profile;
+      }
+      createFromDefault() {
+        const id = this.presentation?.state.defaultProfileId;
+        if (!id) return this.createCopyFromCurrent();
+        const names = new Set(this.getProfiles().map((p) => p.name.toLowerCase()));
+        let name = "Default copy", n = 2;
+        while (names.has(name.toLowerCase())) name = `Default copy ${n++}`;
+        return this.createCustomProfile(name, id);
+      }
+      createCopyFromCurrent() {
+        const source = this.getActiveProfile();
+        const base = source.name.replace(/ copy(?: [0-9]+)?$/i, "").slice(0, 88);
+        const names = new Set(this.getProfiles().map((profile) => profile.name.toLowerCase()));
+        let name = `${base} copy`;
+        let suffix = 2;
+        while (names.has(name.toLowerCase())) name = `${base} copy ${suffix++}`;
+        return this.createCustomProfile(name, source.id);
       }
       duplicateProfile(id) {
         const source = this.getProfile(id);
@@ -2059,16 +2482,21 @@ var require_profile_manager = __commonJS({
           moduleEnabled: { ...active.moduleEnabled, ...update.moduleEnabled || {} },
           modules
         }, this.knownModules);
+        this.presentation?.recordUpdate(update);
         this.customProfiles[index] = updated;
         this.settingsManager.settings.customProfiles = this.customProfiles;
         return updated;
       }
       updateModuleSettings(moduleId, update) {
         if (!this.knownModules.has(moduleId)) throw new Error(`Unknown customization module "${moduleId}".`);
-        const active = this.getActiveProfile();
-        return this.updateActiveProfile({
-          modules: { [moduleId]: { ...active.modules[moduleId], ...update } }
-        });
+        const module3 = this.modules.find((item) => item.id === moduleId), active = this.getActiveProfile();
+        const followsTheme = active.modules[moduleId].useThemeColors === true && !Object.hasOwn(update, "useThemeColors") && Object.keys(update).some((key) => module3.settingsSchema[key]?.type === "color");
+        const result = this.updateActiveProfile({ modules: { [moduleId]: followsTheme ? { ...update, useThemeColors: false } : update }, ...this.presentation ? { moduleEnabled: { [moduleId]: true } } : {} });
+        if (followsTheme && this.presentation) {
+          const { value } = this.presentation.variant(active.id);
+          value.moduleKeys[moduleId] = value.moduleKeys[moduleId].filter((key) => key !== "useThemeColors");
+        }
+        return result;
       }
       setModuleEnabled(moduleId, enabled) {
         if (!this.knownModules.has(moduleId) || typeof enabled !== "boolean") {
@@ -2077,12 +2505,14 @@ var require_profile_manager = __commonJS({
         return this.updateActiveProfile({ moduleEnabled: { [moduleId]: enabled } });
       }
       deleteCustomProfile(id) {
+        if (id === this.presentation?.state.defaultProfileId) throw new Error("Default is the editable template and cannot be deleted.");
         const index = this.customProfiles.findIndex((profile) => profile.id === id);
         if (index < 0) throw new Error(`Cannot delete built-in or unknown profile "${id}".`);
         this.customProfiles.splice(index, 1);
+        if (this.presentation) delete this.presentation.state.profiles[id];
         this.settingsManager.settings.customProfiles = this.customProfiles;
         if (this.settingsManager.settings.activeProfileId === id) {
-          this.settingsManager.settings.activeProfileId = this.builtInProfiles[0].id;
+          this.settingsManager.settings.activeProfileId = this.presentation?.state.defaultProfileId || this.builtInProfiles[0].id;
         }
       }
     };
@@ -2126,6 +2556,7 @@ var require_theme_engine = __commonJS({
         this.documentEngines = /* @__PURE__ */ new Map();
         this.previousClassState = null;
         this.previousProfile = null;
+        this.appliedProfileId = null;
       }
       async loadCoreCss() {
         const configDir = this.plugin.app.vault.configDir.replace(/\/+$/, "");
@@ -2153,6 +2584,11 @@ var require_theme_engine = __commonJS({
         if (style.textContent !== css) style.textContent = css;
       }
       apply(profile) {
+        if (this.plugin.settingsManager?.settings.customizationEnabled === false) {
+          this.pause();
+          return;
+        }
+        profile = this.plugin.presentation?.resolveProfile(profile.id, this.body) || profile;
         if (!this.isSecondaryDocument) {
           const documents = this.plugin.moduleManager?.getDocuments?.() || /* @__PURE__ */ new Set([this.body.ownerDocument]);
           for (const [doc, engine] of this.documentEngines) {
@@ -2173,53 +2609,59 @@ var require_theme_engine = __commonJS({
             engine.apply(profile);
           }
         }
-        if (this.previousClassState === null) {
-          this.previousClassState = this.body.classList.contains("customization-studio-enabled");
+        const inherited = profile.studio?.neutral && profile.studio.appearance === "auto";
+        const keys = inherited ? profile.studio.globalKeys : Object.keys(profile.variables);
+        const declarations = [];
+        for (const [key, [customProperty, obsidianProperty]] of Object.entries(VARIABLE_MAP)) if (keys.includes(key)) {
+          declarations.push(`${customProperty}: ${profile.variables[key]};`, `${obsidianProperty}: var(${customProperty});`);
         }
-        if (this.previousProfile === null) {
-          this.previousProfile = this.body.dataset.customizationStudioProfile;
+        if (profile.studio && !inherited) {
+          const p = profile.studio.palette;
+          for (const [name, value] of Object.entries({ "--background-primary-alt": p.secondary, "--background-secondary": p.secondary, "--background-secondary-alt": p.secondaryAlt, "--background-modifier-border": p.border, "--background-modifier-border-hover": p.muted, "--background-modifier-hover": p.hover, "--text-muted": p.muted, "--text-faint": p.faint, "--text-accent": p.accent, "--text-on-accent": p.onAccent, "--interactive-accent-hover": p.accent, "--interactive-normal": p.secondary, "--interactive-hover": p.hover, "--background-modifier-form-field": p.secondary })) declarations.push(`${name}: ${value};`);
+          declarations.push(`color-scheme: ${profile.studio.mode};`);
+        } else if (keys.includes("accentColor")) declarations.push(`--text-accent: ${profile.variables.accentColor};`);
+        const tab = [];
+        if (!inherited || keys.includes("tabBarOpacity")) tab.push(`background-color: ${profile.variables.tabBarOpacity === 0 ? "transparent" : colorWithOpacity(profile.variables.surfaceColor, profile.variables.tabBarOpacity / 100)};`);
+        if (!inherited || keys.some((k) => k.startsWith("tabBarGradient"))) tab.push(`background-image: ${tabBarGradient(profile.variables)};`);
+        if (!inherited || keys.includes("tabBarBlur")) tab.push(`backdrop-filter: blur(${profile.variables.tabBarBlur}px);`, `-webkit-backdrop-filter: blur(${profile.variables.tabBarBlur}px);`);
+        if (!declarations.length && !tab.length && !profile.customCss) {
+          this.clearEffects(true);
+          return;
         }
+        if (this.previousClassState === null) this.previousClassState = this.body.classList.contains("customization-studio-enabled");
+        if (this.previousProfile === null) this.previousProfile = this.body.dataset.customizationStudioProfile;
         this.body.classList.add("customization-studio-enabled");
         this.body.dataset.customizationStudioProfile = profile.id;
-        const declarations = [];
-        for (const [key, [customProperty, obsidianProperty]] of Object.entries(VARIABLE_MAP)) {
-          const value = profile.variables[key];
-          if (value) {
-            declarations.push(`${customProperty}: ${value};`);
-            declarations.push(`${obsidianProperty}: var(${customProperty});`);
+        this.appliedProfileId = profile.id;
+        const selector = `body.customization-studio-enabled[data-customization-studio-profile="${profile.id}"]`;
+        this.setStyle("variables", `${selector}{${declarations.join("\n")}}${tab.length ? `${selector} .workspace-tab-header-container{${tab.join("\n")}}` : ""}`);
+        this.setStyle("profile", profile.customCss || "");
+      }
+      clearEffects(keepCore = false) {
+        if (this.previousClassState !== null) {
+          if (this.previousClassState === false) this.body.classList.remove("customization-studio-enabled");
+          if (this.body.dataset.customizationStudioProfile === this.appliedProfileId) {
+            if (this.previousProfile === void 0) delete this.body.dataset.customizationStudioProfile;
+            else this.body.dataset.customizationStudioProfile = this.previousProfile;
           }
         }
-        this.setStyle(
-          "variables",
-          `body.customization-studio-enabled[data-customization-studio-profile="${profile.id}"] {
-  ${declarations.join("\n  ")}
-}
-body.customization-studio-enabled[data-customization-studio-profile="${profile.id}"] .workspace-tab-header-container {
-  background-color: ${profile.variables.tabBarOpacity === 0 ? "transparent" : colorWithOpacity(profile.variables.surfaceColor, profile.variables.tabBarOpacity / 100)};
-  background-image: ${tabBarGradient(profile.variables)};
-  backdrop-filter: blur(${profile.variables.tabBarBlur}px);
-  -webkit-backdrop-filter: blur(${profile.variables.tabBarBlur}px);
-}`
-        );
-        this.setStyle("profile", profile.customCss || "");
+        for (const [id, style] of this.styles) {
+          if (keepCore && id === "core") continue;
+          if (style.parentNode) style.remove();
+          this.styles.delete(id);
+        }
+        this.previousClassState = null;
+        this.previousProfile = null;
+        this.appliedProfileId = null;
+      }
+      pause() {
+        for (const engine of this.documentEngines.values()) engine.pause();
+        this.clearEffects(true);
       }
       unload() {
         for (const engine of this.documentEngines.values()) engine.unload();
         this.documentEngines.clear();
-        if (this.previousClassState === false) {
-          this.body.classList.remove("customization-studio-enabled");
-        }
-        if (this.previousProfile === void 0) {
-          delete this.body.dataset.customizationStudioProfile;
-        } else if (this.body.dataset.customizationStudioProfile === this.plugin.profileManager?.getActiveProfile()?.id) {
-          this.body.dataset.customizationStudioProfile = this.previousProfile;
-        }
-        for (const style of this.styles.values()) {
-          if (style.parentNode) style.remove();
-        }
-        this.styles.clear();
-        this.previousClassState = null;
-        this.previousProfile = null;
+        this.clearEffects(false);
       }
     };
     module2.exports = { ThemeEngine: ThemeEngine2, VARIABLE_MAP, colorWithOpacity, tabBarGradient };
@@ -2282,7 +2724,7 @@ var require_module_manager = __commonJS({
         for (const module3 of this.modules) {
           const controller = module3.createController(this.plugin, this, module3);
           this.controllers.set(module3.id, controller);
-          controller.start();
+          if (this.plugin.settingsManager?.settings.customizationEnabled !== false) controller.start();
         }
         const workspace = this.plugin.app.workspace;
         this.plugin.registerEvent(workspace.on("layout-change", () => this.refreshWithNotice()));
@@ -2300,6 +2742,7 @@ var require_module_manager = __commonJS({
         this.plugin.register(() => this.unload());
       }
       watchDocuments() {
+        if (this.plugin.settingsManager?.settings.customizationEnabled === false) return;
         const documents = this.getDocuments();
         for (const [doc, observer] of this.documents) {
           if (!documents.has(doc)) {
@@ -2344,11 +2787,26 @@ var require_module_manager = __commonJS({
         const controller = this.controllers.get(moduleId);
         return controller?.getColumnNames?.() || [];
       }
+      pause() {
+        if (this.pendingRefresh !== null) clearTimeout(this.pendingRefresh);
+        this.pendingRefresh = null;
+        for (const observer of this.documents.values()) observer?.disconnect();
+        this.documents.clear();
+        for (const controller of this.controllers.values()) controller.deactivate();
+      }
       refresh(profile = this.plugin.profileManager.getActiveProfile()) {
+        if (this.plugin.settingsManager?.settings.customizationEnabled === false) {
+          this.pause();
+          return;
+        }
         this.watchDocuments();
         for (const controller of this.controllers.values()) controller.refresh(profile);
       }
       refreshWithNotice() {
+        if (this.plugin.settingsManager?.settings.customizationEnabled === false) {
+          this.pause();
+          return;
+        }
         try {
           const profile = this.plugin.profileManager.getActiveProfile();
           this.plugin.themeEngine?.apply(profile);
@@ -2372,21 +2830,290 @@ var require_module_manager = __commonJS({
   }
 });
 
+// core/presentation-manager.js
+var require_presentation_manager = __commonJS({
+  "core/presentation-manager.js"(exports2, module2) {
+    var { validateShapeOptions } = require_shape_options();
+    var MODES = ["auto", "light", "dark"];
+    var copy = (value) => JSON.parse(JSON.stringify(value));
+    var COLORS = {
+      minimal: { light: ["#7657c9", "#faf9fc", "#292633"], dark: ["#9b8af5", "#202027", "#e5e3ed"] },
+      "dark-academia": { light: ["#846031", "#f5efdf", "#3b3024"], dark: ["#b18a58", "#29231e", "#e6dac5"] },
+      glassmorphism: { light: ["#346eae", "#f0f6fc", "#20354d"], dark: ["#77b4ec", "#17212d", "#e2eef8"] },
+      colorful: { light: ["#b22f70", "#fff7fb", "#3d2637"], dark: ["#ed83b6", "#252331", "#f1e5ef"] },
+      "focus-mode": { light: ["#496a59", "#f7f8f6", "#28332c"], dark: ["#a7b9a9", "#202620", "#e2e9e2"] }
+    };
+    function mix(a, b, amount) {
+      return "#" + [1, 3, 5].map((i) => Math.round(parseInt(a.slice(i, i + 2), 16) * (1 - amount) + parseInt(b.slice(i, i + 2), 16) * amount).toString(16).padStart(2, "0")).join("");
+    }
+    function palette(variables, mode) {
+      const background = variables.surfaceColor, text = variables.textColor, accent = variables.accentColor;
+      return { background, text, accent, secondary: mix(background, text, 0.055), secondaryAlt: mix(background, text, 0.09), border: mix(background, text, 0.19), muted: mix(text, background, 0.3), faint: mix(text, background, 0.47), hover: mix(background, text, 0.09), onAccent: mode === "light" ? "#ffffff" : "#17151e" };
+    }
+    function detectMode(body) {
+      if (body?.classList?.contains("theme-light") || body?.classList?.contains("light")) return "light";
+      if (body?.classList?.contains("theme-dark") || body?.classList?.contains("dark")) return "dark";
+      return body?.ownerDocument?.defaultView?.matchMedia?.("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+    }
+    function asHex(value, fallback) {
+      const text = String(value || "").trim();
+      if (/^#[0-9a-f]{6}$/i.test(text)) return text.toLowerCase();
+      if (/^#[0-9a-f]{3}$/i.test(text)) return "#" + [...text.slice(1)].map((c) => c + c).join("");
+      const match = text.match(/^rgba?\(\s*(\d+(?:\.\d+)?)[, ]+\s*(\d+(?:\.\d+)?)[, ]+\s*(\d+(?:\.\d+)?)/i);
+      return match ? "#" + match.slice(1, 4).map((v) => Math.max(0, Math.min(255, Math.round(Number(v)))).toString(16).padStart(2, "0")).join("") : fallback;
+    }
+    function themedModules(modules, variables, mode) {
+      const result = copy(modules), p = palette(variables, mode);
+      for (const values of Object.values(result)) for (const key of Object.keys(values)) {
+        if (typeof values[key] !== "string" || !/^#[0-9a-f]{6}$/i.test(values[key])) continue;
+        if (/border|divider/i.test(key)) values[key] = p.border;
+        else if (/(?:text|contentColor|headerColor|fieldText)/i.test(key)) values[key] = p.text;
+        else if (/background|overlay/i.test(key)) values[key] = /container|overlay/i.test(key) ? p.background : p.secondary;
+      }
+      return result;
+    }
+    var PresentationManager2 = class {
+      constructor(plugin) {
+        this.plugin = plugin;
+        this.pm = plugin.profileManager;
+        this.state = { version: 1, defaultProfileId: null, profiles: {} };
+        this.pendingShapeTarget = false;
+      }
+      get path() {
+        const config = this.plugin.app.vault.configDir.replace(/\/+$/, "");
+        return `${(this.plugin.manifest.dir || `${config}/plugins/${this.plugin.manifest.id}`).replace(/\/+$/, "")}/studio-appearance.json`;
+      }
+      body() {
+        return this.plugin.app.workspace.containerEl.ownerDocument.body;
+      }
+      hostMode() {
+        return detectMode(this.body());
+      }
+      captureVariables() {
+        const body = this.body(), mode = this.hostMode(), fallback = COLORS.minimal[mode];
+        const style = body.ownerDocument.defaultView?.getComputedStyle?.(body) || globalThis.getComputedStyle?.(body);
+        const get = (name) => {
+          const raw = style?.getPropertyValue(name);
+          if (!raw) return raw;
+          if (/^#|^rgba?\(/i.test(raw.trim())) return raw;
+          const canvas = body.ownerDocument.createElement("canvas"), context = canvas.getContext?.("2d");
+          if (context) {
+            context.fillStyle = raw;
+            context.fillRect(0, 0, 1, 1);
+            const data = context.getImageData(0, 0, 1, 1).data;
+            return `rgb(${data[0]},${data[1]},${data[2]})`;
+          }
+          return raw;
+        };
+        return { ...this.pm.builtInProfiles[0].variables, accentColor: asHex(get("--interactive-accent"), fallback[0]), surfaceColor: asHex(get("--background-primary"), fallback[1]), textColor: asHex(get("--text-normal"), fallback[2]), tabBarOpacity: 0, tabBarBlur: 0, tabBarGradientIntensity: 0 };
+      }
+      newMeta(base, neutral = false) {
+        const variants = {};
+        for (const mode of ["light", "dark"]) {
+          const colors = COLORS[base.id]?.[mode] || COLORS.minimal[mode];
+          const variables = neutral && mode === this.hostMode() ? copy(base.variables) : { ...base.variables, accentColor: COLORS[base.id] ? colors[0] : base.variables.accentColor, surfaceColor: colors[1], textColor: colors[2] };
+          if (!neutral && !COLORS[base.id] && mode === "dark") Object.assign(variables, base.variables);
+          variants[mode] = { variables, modules: neutral ? copy(base.modules) : themedModules(base.modules, variables, mode), globalKeys: [], moduleKeys: {} };
+        }
+        return { neutral, mode: "auto", variants, baseline: copy(variants), shapes: { selected: base.modules.bases?.cardsShape || "standard", options: {} } };
+      }
+      validateState(raw) {
+        if (!raw || raw.version !== 1 || !raw.profiles || typeof raw.profiles !== "object" || Array.isArray(raw.profiles)) throw new Error("Invalid appearance settings file. Restore its backup instead of overwriting it.");
+        if (raw.defaultProfileId !== null && typeof raw.defaultProfileId !== "string") throw new Error("Invalid Default profile identifier.");
+        for (const [id, meta] of Object.entries(raw.profiles)) {
+          if (!/^[a-z0-9][a-z0-9-]{0,63}$/.test(id) || !meta || typeof meta.neutral !== "boolean" || !MODES.includes(meta.mode)) throw new Error("Invalid profile appearance record.");
+          for (const mode of ["light", "dark"]) {
+            const v = meta.variants?.[mode];
+            if (!v || !Array.isArray(v.globalKeys) || !v.moduleKeys || typeof v.moduleKeys !== "object") throw new Error("Invalid light/dark variant.");
+            if (v.globalKeys.some((key) => !Object.hasOwn(this.pm.builtInProfiles[0].variables, key))) throw new Error("Unknown global appearance key.");
+            for (const [moduleId, keys] of Object.entries(v.moduleKeys)) {
+              const module3 = this.pm.modules.find((m) => m.id === moduleId);
+              if (!module3 || !Array.isArray(keys) || keys.some((key) => !Object.hasOwn(module3.settingsSchema, key))) throw new Error("Invalid integration override list.");
+            }
+            const base = this.pm.getProfile(id);
+            if (base) {
+              const { validateProfile } = require_profile_manager();
+              validateProfile({ ...base, variables: v.variables, modules: v.modules }, this.pm.knownModules);
+              const baseline = meta.baseline?.[mode];
+              if (!baseline) throw new Error("Missing variant baseline.");
+              validateProfile({ ...base, variables: baseline.variables, modules: baseline.modules }, this.pm.knownModules);
+            }
+          }
+          if (!meta.shapes || typeof meta.shapes.selected !== "string" || !meta.shapes.options || typeof meta.shapes.options !== "object" || Array.isArray(meta.shapes.options)) throw new Error("Invalid shape settings.");
+          validateShapeOptions(meta.shapes.selected);
+          for (const [shape, options] of Object.entries(meta.shapes.options)) validateShapeOptions(shape, options);
+        }
+        return raw;
+      }
+      async load() {
+        const adapter = this.plugin.app.vault.adapter;
+        this.persistedData = copy(await this.plugin.loadData() ?? null);
+        if (await adapter.exists(this.path)) {
+          const raw = JSON.parse(await adapter.read(this.path));
+          let recovery;
+          if (raw.transaction) {
+            const current = JSON.stringify(this.persistedData), after = JSON.stringify(raw.transaction.after), before = JSON.stringify(raw.transaction.before);
+            if (current !== after) {
+              if (current !== before) throw new Error("data.json and studio-appearance.json do not match. Restore a matching backup pair before loading this build.");
+              const { SettingsManager: SettingsManager2 } = require_settings_manager();
+              const temporary = new SettingsManager2({ loadData: async () => raw.transaction.after });
+              await temporary.load();
+              const { ProfileManager: ProfileManager2 } = require_profile_manager();
+              const check = new ProfileManager2(temporary);
+              check.load();
+              this.plugin.settingsManager.settings = temporary.settings;
+              this.pm.customProfiles = check.customProfiles;
+              recovery = raw.transaction.after;
+            }
+          }
+          this.state = this.validateState(raw);
+          if (recovery) {
+            await this.plugin.saveData(recovery);
+            this.persistedData = copy(recovery);
+            this.plugin.notifyUser?.("Recovered the latest Customization Studio settings after an interrupted save.");
+          }
+        }
+        let created = false;
+        if (!this.state.defaultProfileId || !this.pm.getProfile(this.state.defaultProfileId)) {
+          const variables = this.captureVariables();
+          const base = this.pm.createCustomProfile("Default", this.pm.builtInProfiles[0].id);
+          base.variables = variables;
+          base.description = "Your current appearance. Nothing is overridden until you change a setting.";
+          for (const module3 of this.pm.modules) base.moduleEnabled[module3.id] = false;
+          this.state.defaultProfileId = base.id;
+          this.state.profiles[base.id] = this.newMeta(base, true);
+          this.plugin.settingsManager.settings.activeProfileId = base.id;
+          created = true;
+        }
+        for (const base of this.pm.getProfiles()) if (!Object.hasOwn(this.state.profiles, base.id)) this.state.profiles[base.id] = this.newMeta(base, false);
+        return created;
+      }
+      meta(id = this.plugin.settingsManager.settings.activeProfileId) {
+        return Object.hasOwn(this.state.profiles, id) ? this.state.profiles[id] : null;
+      }
+      variant(id, body = this.body()) {
+        const meta = this.meta(id);
+        const mode = meta.mode === "auto" ? detectMode(body) : meta.mode;
+        return { meta, mode, value: meta.variants[mode] };
+      }
+      resolveProfile(id, body = this.body()) {
+        const base = this.pm.getProfile(id);
+        const entry = this.meta(id);
+        if (!base || !entry) return base;
+        const { meta, mode, value } = this.variant(id, body);
+        const effective = { ...base, variables: copy(value.variables), modules: copy(value.modules) };
+        effective.modules.bases.cardsShape = meta.shapes.selected;
+        Object.defineProperty(effective, "studio", { enumerable: false, value: { neutral: meta.neutral, mode, appearance: meta.mode, globalKeys: value.globalKeys, moduleKeys: value.moduleKeys, palette: palette(effective.variables, mode) } });
+        return effective;
+      }
+      refreshInheritedPalette() {
+        const id = this.plugin.settingsManager.settings.activeProfileId, meta = this.meta(id);
+        if (!meta?.neutral || meta.mode !== "auto") return;
+        const { value } = this.variant(id), captured = this.captureVariables();
+        for (const key of ["accentColor", "surfaceColor", "textColor"]) if (!value.globalKeys.includes(key)) value.variables[key] = captured[key];
+      }
+      recordUpdate(update) {
+        const id = this.plugin.settingsManager.settings.activeProfileId, { value } = this.variant(id);
+        if (update.variables) {
+          Object.assign(value.variables, update.variables);
+          value.globalKeys = [.../* @__PURE__ */ new Set([...value.globalKeys, ...Object.keys(update.variables)])];
+        }
+        for (const [moduleId, settings] of Object.entries(update.modules || {})) {
+          Object.assign(value.modules[moduleId], settings);
+          value.moduleKeys[moduleId] = [.../* @__PURE__ */ new Set([...value.moduleKeys[moduleId] || [], ...Object.keys(settings).filter((k) => k !== "cardsShape")])];
+          if (moduleId === "bases" && settings.cardsShape !== void 0) {
+            this.meta(id).shapes.selected = settings.cardsShape;
+            this.pendingShapeTarget = true;
+          }
+        }
+      }
+      cloneProfile(sourceId, newId) {
+        const source = this.meta(sourceId);
+        this.state.profiles[newId] = source ? copy(source) : this.newMeta(this.pm.getProfile(newId), false);
+      }
+      setMode(mode) {
+        if (!MODES.includes(mode)) throw new Error("Choose Follow Obsidian, Light, or Dark.");
+        this.meta().mode = mode;
+      }
+      getShapeOptions(shape = this.meta().shapes.selected) {
+        return validateShapeOptions(shape, this.meta().shapes.options[shape]);
+      }
+      setShapeOptions(shape, update) {
+        if (!this.pm.customProfiles.some((p) => p.id === this.plugin.settingsManager.settings.activeProfileId)) throw new Error("Create an editable profile first.");
+        this.meta().shapes.options[shape] = validateShapeOptions(shape, { ...this.getShapeOptions(shape), ...update });
+        this.pendingShapeTarget = true;
+        this.pm.getProfile(this.plugin.settingsManager.settings.activeProfileId).moduleEnabled.bases = true;
+      }
+      resetShape(shape) {
+        this.meta().shapes.options[shape] = validateShapeOptions(shape);
+        this.pendingShapeTarget = true;
+      }
+      resetGlobal() {
+        const { meta, mode, value } = this.variant(this.plugin.settingsManager.settings.activeProfileId);
+        value.variables = copy(meta.baseline?.[mode]?.variables || this.captureVariables());
+        value.globalKeys = [];
+        this.pm.getProfile(this.plugin.settingsManager.settings.activeProfileId).variables = copy(value.variables);
+      }
+      resetModule(moduleId) {
+        const { meta, mode, value } = this.variant(this.plugin.settingsManager.settings.activeProfileId);
+        value.modules[moduleId] = copy(meta.baseline?.[mode]?.modules?.[moduleId] || this.pm.modules.find((m) => m.id === moduleId).defaultSettings);
+        delete value.moduleKeys[moduleId];
+        const base = this.pm.getProfile(this.plugin.settingsManager.settings.activeProfileId);
+        base.modules[moduleId] = copy(value.modules[moduleId]);
+        base.moduleEnabled[moduleId] = false;
+        if (moduleId === "bases") {
+          meta.shapes = { selected: "standard", options: {} };
+        }
+      }
+      snapshot() {
+        return copy(this.state);
+      }
+      legacyData(snapshot) {
+        const value = copy(snapshot);
+        for (const profile of value.customProfiles || []) if (profile.modules?.bases) delete profile.modules.bases.cardsShape;
+        return value;
+      }
+      async backupSidecar(adapter, path) {
+        try {
+          if (await adapter.exists(path)) await adapter.write(path + ".bak", await adapter.read(path));
+        } catch (error) {
+          if (!this.backupWarned) {
+            this.backupWarned = true;
+            console.warn("Customization Studio could not refresh studio-appearance.json.bak; saving without a new backup.", error);
+          }
+        }
+      }
+      async save(snapshot, state) {
+        const adapter = this.plugin.app.vault.adapter, path = this.path, temp = path + ".tmp";
+        const next = this.legacyData(snapshot), document = { ...state, transaction: { before: this.persistedData ?? null, after: next } };
+        await adapter.write(temp, JSON.stringify(document, null, 2));
+        await this.backupSidecar(adapter, path);
+        await adapter.rename(temp, path);
+        await this.plugin.saveData(next);
+        this.persistedData = copy(next);
+      }
+    };
+    module2.exports = { PresentationManager: PresentationManager2, detectMode, palette, copy };
+  }
+});
+
 // core/settings-tab.js
 var require_settings_tab = __commonJS({
   "core/settings-tab.js"(exports2, module2) {
     var { PluginSettingTab, Setting, Notice: Notice2 } = require("obsidian");
     var { MODULES } = require_module_manager();
+    var { CARD_SHAPES } = require_card_shapes();
+    var { shapeSchema, HOVER_EFFECTS } = require_shape_options();
     var CustomizationSettingTab2 = class extends PluginSettingTab {
       constructor(app, plugin) {
         super(app, plugin);
         this.plugin = plugin;
         this.importText = "";
-        this.newProfileName = "";
         this.renameValue = "";
         this.viewContexts = /* @__PURE__ */ new WeakMap();
         this.openViews = /* @__PURE__ */ new Set();
         this.viewSaveTimers = /* @__PURE__ */ new Set();
+        this.pendingInputs = /* @__PURE__ */ new Map();
       }
       display() {
         this.displayInto(this.containerEl, "settingsTab");
@@ -2423,8 +3150,28 @@ var require_settings_tab = __commonJS({
         containerEl.empty();
         containerEl.addClass("customization-studio-settings");
         const header = containerEl.createEl("header", { cls: "cs-settings-header" });
+        const customizationEnabled = this.plugin.settingsManager.settings.customizationEnabled !== false;
+        const master = new Setting(header).setName("Customization").setDesc("Pause all Customization Studio effects without losing your profiles.");
+        master.settingEl?.addClass("cs-master-customization");
+        master.controlEl?.createEl("span", {
+          cls: "cs-customization-state",
+          text: customizationEnabled ? "Enabled" : "Paused",
+          attr: { role: "status", "aria-live": "polite" }
+        });
+        master.addToggle((toggle) => {
+          const element = toggle.toggleEl || toggle.inputEl;
+          element?.setAttribute?.("aria-label", "Customization Studio customization");
+          toggle.setValue(customizationEnabled).onChange((enabled) => this.runChange(async () => {
+            context.focusMasterToggle = true;
+            await this.plugin.setCustomizationEnabled(enabled);
+          }));
+          if (context.focusMasterToggle) {
+            element?.focus?.();
+            delete context.focusMasterToggle;
+          }
+        });
         header.createEl("p", {
-          text: "Visual profiles for Obsidian and supported plugins. Settings preview immediately and save automatically."
+          text: customizationEnabled ? "Visual profiles for Obsidian and supported plugins. Settings preview immediately and save automatically." : "Customization is paused. You can edit profiles; effects return when enabled."
         });
         const activeProfile = this.plugin.profileManager.getActiveProfile();
         const profileHeader = header.createEl("div", {
@@ -2452,7 +3199,7 @@ var require_settings_tab = __commonJS({
         const enabledModules = MODULES.filter((module3) => activeProfile.moduleEnabled[module3.id] !== false).map((module3) => module3.name);
         const moduleSummary = profileHeader.createEl("span", {
           cls: "cs-profile-modules",
-          text: enabledModules.length ? `Enabled: ${enabledModules.join(", ")}` : "No modules enabled"
+          text: enabledModules.length ? `${customizationEnabled ? "Enabled" : "Configured"}: ${enabledModules.join(", ")}` : "No modules enabled"
         });
         context.preview = { name: profileName, swatches: [...swatches.children], moduleSummary };
         const navigation = containerEl.createEl("div", {
@@ -2588,7 +3335,25 @@ var require_settings_tab = __commonJS({
         this.viewContexts.delete(containerEl);
         this.openViews.delete(context);
       }
+      queueLiveInput(element, change) {
+        const previous = this.pendingInputs.get(element);
+        if (previous) clearTimeout(previous.timer);
+        const entry = { change, timer: setTimeout(() => this.flushLiveInput(element), 180) };
+        this.pendingInputs.set(element, entry);
+      }
+      flushLiveInput(element) {
+        const entry = this.pendingInputs.get(element);
+        if (!entry) return;
+        clearTimeout(entry.timer);
+        this.pendingInputs.delete(element);
+        return entry.change();
+      }
+      async flushLiveInputs() {
+        await Promise.all([...this.pendingInputs.keys()].map((element) => this.flushLiveInput(element)));
+      }
       dispose() {
+        for (const entry of this.pendingInputs.values()) clearTimeout(entry.timer);
+        this.pendingInputs.clear();
         this.captureViewState();
         for (const context of this.openViews) {
           context.containerEl.removeEventListener("scroll", context.scrollHandler);
@@ -2661,13 +3426,9 @@ var require_settings_tab = __commonJS({
         const section = containerEl.createEl("div", { cls: "cs-section" });
         new Setting(section).setName("Profiles").setHeading();
         section.createEl("p", {
-          text: `Editing profiles. The active profile is "${active.name}".`
+          text: isCustom ? "Editing your copy. Changes save automatically." : "Built-in preset. Use Manage profile > Duplicate to make an editable copy. Create from Default starts from your own template instead."
         });
-        section.createEl("p", {
-          cls: "cs-suggestions-unavailable",
-          text: "Suggested profiles are unavailable: this version does not define recommendation rules or verified theme-detection behavior."
-        });
-        new Setting(section).setName("Active profile").setDesc(`Currently active: ${active.name}. Switching applies the profile immediately.`).addDropdown((dropdown) => {
+        new Setting(section).setName("Active profile").setDesc(`Currently selected: ${active.name}. ${this.plugin.settingsManager.settings.customizationEnabled === false ? "Changes apply when customization is enabled." : "Switching applies the profile immediately."}`).addDropdown((dropdown) => {
           for (const profile of this.plugin.profileManager.getProfiles()) {
             dropdown.addOption(profile.id, profile.name);
           }
@@ -2676,50 +3437,50 @@ var require_settings_tab = __commonJS({
             this.plugin.applyCustomization();
             this.refreshAllViews();
             await this.persistChange(context, true);
-            new Notice2(`Customization Studio: applied "${this.plugin.profileManager.getActiveProfile().name}".`);
+            new Notice2(`Customization Studio: ${this.plugin.settingsManager.settings.customizationEnabled === false ? "selected" : "applied"} "${this.plugin.profileManager.getActiveProfile().name}".`);
           }));
         });
-        new Setting(section).setName("New profile").setDesc("Create a profile by copying the active profile.").addText((text) => {
-          text.setPlaceholder("Profile name").setValue(this.newProfileName);
-          text.inputEl.maxLength = 100;
-          text.onChange((value) => {
-            this.newProfileName = value;
-          });
-        }).addButton((button) => button.setButtonText("Create").setCta().onClick(() => this.runChange(async () => {
-          this.plugin.profileManager.createCustomProfile(this.newProfileName);
-          this.newProfileName = "";
+        if (this.plugin.presentation) new Setting(section).setName("Appearance").setDesc("Each profile has Light and Dark variants. Follow Obsidian uses the host/system theme; editing changes the current variant.").addDropdown((dropdown) => {
+          dropdown.addOption("auto", "Follow Obsidian / system").addOption("light", "Light").addOption("dark", "Dark");
+          dropdown.setValue(this.plugin.presentation.meta().mode).onChange((mode) => this.runChange(async () => {
+            this.plugin.presentation.setMode(mode);
+            this.plugin.applyCustomization();
+            this.refreshAllViews();
+            await this.persistChange(context, true);
+          }));
+        });
+        new Setting(section).setName("Create profile").setDesc("Start from your editable Default template, not an imposed preset. Rename the new profile later.").addButton((button) => button.setButtonText(this.plugin.presentation ? "Create from Default" : "Create copy from current").setCta().onClick(() => this.runChange(async () => {
+          this.plugin.profileManager.createFromDefault();
+          this.renameValue = "";
           this.plugin.applyCustomization();
           this.refreshAllViews();
           await this.persistChange(context, true);
         })));
-        if (isCustom) {
-          new Setting(section).setName("Duplicate profile").setDesc("Create an independent copy of the active profile.").addButton((button) => button.setButtonText("Duplicate").onClick(() => this.runChange(async () => {
+        const manage = section.createEl("details", { cls: "cs-subsection" });
+        manage.createEl("summary", { text: "Manage profile" });
+        {
+          new Setting(manage).setName("Duplicate profile").setDesc("Create an independent copy of the active profile.").addButton((button) => button.setButtonText("Duplicate").onClick(() => this.runChange(async () => {
             this.plugin.profileManager.duplicateProfile(active.id);
             this.plugin.applyCustomization();
             this.refreshAllViews();
             await this.persistChange(context, true);
           })));
-          new Setting(section).setName("Rename profile").addText((text) => {
+        }
+        if (isCustom) {
+          new Setting(manage).setName("Rename profile").addText((text) => {
             text.inputEl.maxLength = 100;
             text.setPlaceholder(active.name).setValue(this.renameValue || active.name).onChange((value) => {
               this.renameValue = value;
             });
           }).addButton((button) => button.setButtonText("Rename").onClick(() => this.runChange(async () => {
-            this.plugin.profileManager.renameCustomProfile(active.id, this.renameValue);
+            this.plugin.profileManager.renameCustomProfile(active.id, this.renameValue || active.name);
             this.renameValue = "";
             this.plugin.applyCustomization();
             this.refreshAllViews();
             await this.persistChange(context, true);
           })));
-        } else {
-          new Setting(section).setName("Customize built-in profile").setDesc("Make an editable copy before changing its appearance or module settings.").addButton((button) => button.setButtonText("Duplicate").setCta().onClick(() => this.runChange(async () => {
-            this.plugin.profileManager.createCustomProfile(`${active.name} custom`);
-            this.plugin.applyCustomization();
-            this.refreshAllViews();
-            await this.persistChange(context, true);
-          })));
         }
-        new Setting(section).setName("Export profile").setDesc("Copy the active profile as JSON, including all module settings.").addButton((button) => button.setButtonText("Copy JSON").onClick(() => this.runChange(async () => {
+        new Setting(manage).setName("Export profile").setDesc("Copy the active profile with both variants and per-shape settings. This format needs the new build.").addButton((button) => button.setButtonText("Copy JSON").onClick(() => this.runChange(async () => {
           if (!globalThis.navigator?.clipboard?.writeText) {
             throw new Error("Clipboard access is unavailable in this Obsidian environment.");
           }
@@ -2727,8 +3488,12 @@ var require_settings_tab = __commonJS({
             this.plugin.profileManager.exportProfile(active.id)
           );
           new Notice2("Customization Studio: profile JSON copied.");
+        }))).addButton((button) => button.setButtonText("Legacy JSON").onClick(() => this.runChange(async () => {
+          if (!globalThis.navigator?.clipboard?.writeText) throw new Error("Clipboard access is unavailable.");
+          await globalThis.navigator.clipboard.writeText(this.plugin.profileManager.exportProfile(active.id, true));
+          new Notice2("Copied the current look in legacy format. Shape settings and the other variant are not included.");
         })));
-        new Setting(section).setName("Import profile").setDesc("Paste profile JSON. Imported IDs are made unique automatically.").addTextArea((text) => {
+        new Setting(manage).setName("Import profile").setDesc("Paste profile JSON. Imported IDs are made unique automatically.").addTextArea((text) => {
           text.setPlaceholder("Paste exported profile JSON").setValue(this.importText);
           text.inputEl.addClass("cs-code-input");
           text.onChange((value) => {
@@ -2743,8 +3508,8 @@ var require_settings_tab = __commonJS({
           await this.persistChange(context, true);
           new Notice2(`Customization Studio: imported "${imported.name}".`);
         })));
-        if (isCustom) {
-          new Setting(section).setName("Delete profile").setDesc("Switches to Minimal if this is the active profile.").addButton((button) => button.setButtonText("Delete").setWarning().onClick(() => this.runChange(async () => {
+        if (isCustom && active.id !== this.plugin.presentation?.state.defaultProfileId) {
+          new Setting(manage).setName("Delete profile").setDesc("Switches to Default if this is the active profile.").addButton((button) => button.setButtonText("Delete").setWarning().onClick(() => this.runChange(async () => {
             this.plugin.profileManager.deleteCustomProfile(active.id);
             this.plugin.applyCustomization();
             this.refreshAllViews();
@@ -2759,6 +3524,7 @@ var require_settings_tab = __commonJS({
           section.createEl("p", { text: "Duplicate the active built-in profile to edit its settings." });
           return;
         }
+        if (profile.studio?.neutral) section.createEl("p", { text: "Native styling is inherited until you change a control. These colors are captured from the current theme; this is not a replacement for your theme or CSS snippets." });
         this.addColorControl(
           section,
           "Accent color",
@@ -2825,19 +3591,19 @@ var require_settings_tab = __commonJS({
         new Setting(section).setName("Tab bar gradient intensity").setDesc("Set the gradient opacity. Zero disables the gradient.").addSlider((slider) => slider.setLimits(0, 100, 1).setValue(profile.variables.tabBarGradientIntensity).setDynamicTooltip().onChange((value) => this.updateProfile({
           variables: { tabBarGradientIntensity: value }
         }, context)));
-        new Setting(section).setName("Reset global appearance").setDesc("Restores global colors and tab bar appearance to Minimal defaults.").addButton((button) => button.setButtonText("Reset").onClick(() => this.updateProfile({
-          variables: this.plugin.profileManager.builtInProfiles[0].variables,
-          replaceVariables: true
-        }, context, true)));
+        new Setting(section).setName("Reset global appearance").setDesc("Returns global controls to the captured Default baseline without imposing a preset.").addButton((button) => button.setButtonText("Reset").onClick(() => this.plugin.presentation ? this.runChange(async () => {
+          this.plugin.presentation.resetGlobal();
+          this.plugin.applyCustomization();
+          this.refreshAllViews();
+          await this.persistChange(context, true);
+        }) : this.updateProfile({ variables: this.plugin.profileManager.builtInProfiles[0].variables, replaceVariables: true }, context, true)));
         const advanced = section.createEl("details", { cls: "cs-subsection" });
         advanced.createEl("summary", { text: "Advanced global CSS" });
         advanced.createEl("p", { text: "Advanced rules can affect any matching Obsidian interface element." });
         new Setting(advanced).setName("Profile CSS").addTextArea((text) => {
           text.setPlaceholder("Optional profile-wide CSS").setValue(profile.customCss);
           text.inputEl.addClass("cs-code-input");
-          text.inputEl.addEventListener("blur", () => this.updateProfile({
-            customCss: text.getValue()
-          }, context));
+          text.onChange((value) => this.updateProfile({ customCss: value }, context));
         });
       }
       displayModules(containerEl, context) {
@@ -2906,17 +3672,29 @@ var require_settings_tab = __commonJS({
         section.createEl("p", {
           text: detected ? "Target detected. Styling applies when a matching view is open." : module3.target.type === "core" ? "Obsidian Core Plugin is not enabled or its API is unavailable." : "Community plugin is not enabled."
         });
+        if (context) {
+          context.themeColorToggle = null;
+          context.integrationEnabledToggle = null;
+        }
+        if (profile.studio?.neutral) section.createEl("p", { text: "Untouched controls inherit native styling. Changing a control enables this integration and overrides only that control, not a preset palette." });
         if (module3.compatibilityNote) section.createEl("p", { cls: "cs-compatibility-note", text: module3.compatibilityNote });
-        new Setting(section).setName("Enable customization").setDesc("Turning this off removes this module's styles and observers.").addToggle((toggle) => toggle.setValue(profile.moduleEnabled[module3.id] !== false).onChange((value) => this.runChange(async () => {
-          this.plugin.profileManager.setModuleEnabled(module3.id, value);
-          await this.persistChange(context);
-          this.refreshProfilePreview(context);
-        })));
+        new Setting(section).setName("Enable customization").setDesc("Turning this off removes this integration's effects. Changing a control enables it again; master pause still wins.").addToggle((toggle) => {
+          if (context) context.integrationEnabledToggle = { id: module3.id, toggle };
+          return toggle.setValue(profile.moduleEnabled[module3.id] !== false).onChange((value) => this.runChange(async () => {
+            this.plugin.profileManager.setModuleEnabled(module3.id, value);
+            await this.persistChange(context);
+            this.refreshProfilePreview(context);
+          }));
+        });
         for (const group of module3.controlGroups) {
           const groupEl = section.createEl("details", { cls: "cs-subsection", attr: { open: true } });
           groupEl.createEl("summary", { text: group.name });
           for (const control of group.controls) {
             this.displayControl(groupEl, module3, profile, control, context);
+            if (module3.id === "bases" && control.key === "cardsShape") {
+              this.displayShapeOptions(groupEl, context);
+              this.displayCardShapeTarget(groupEl, context);
+            }
           }
           if (module3.id === "kanban" && group.name === "Columns") {
             this.displayColumnOverrides(groupEl, module3, profile, context);
@@ -2930,17 +3708,62 @@ var require_settings_tab = __commonJS({
         new Setting(advanced).setName("Module CSS").addTextArea((text) => {
           text.setPlaceholder("Optional module-specific CSS").setValue(profile.modules[module3.id].customCss);
           text.inputEl.addClass("cs-code-input");
-          text.inputEl.addEventListener("blur", () => this.updateModule(module3.id, {
-            customCss: text.getValue()
-          }, context));
+          const change = () => this.updateModule(module3.id, { customCss: text.getValue() }, context);
+          text.onChange(() => this.queueLiveInput(text.inputEl, change));
+          text.inputEl.addEventListener("blur", () => this.flushLiveInput(text.inputEl));
         });
         new Setting(section).setName("Reset module settings").setDesc("Restores this module's visual settings to their defaults.").addButton((button) => button.setButtonText("Reset").setWarning().onClick(() => this.runChange(async () => {
-          this.plugin.profileManager.updateActiveProfile({
-            modules: { [module3.id]: module3.defaultSettings }
-          });
+          if (this.plugin.presentation) this.plugin.presentation.resetModule(module3.id);
+          else this.plugin.profileManager.updateActiveProfile({ modules: { [module3.id]: module3.defaultSettings } });
           await this.persistChange(context);
           this.refreshDisplay(context);
         })));
+      }
+      displayShapeOptions(containerEl, context) {
+        if (!this.plugin.presentation) return;
+        const shape = this.plugin.profileManager.getActiveProfile().modules.bases.cardsShape;
+        const options = this.plugin.presentation.getShapeOptions(shape), details = containerEl.createEl("details", { cls: "cs-subsection", attr: { open: true } });
+        details.createEl("summary", { text: `${CARD_SHAPES[shape]} settings` });
+        for (const [key, definition] of Object.entries(shapeSchema(shape))) {
+          const setting = new Setting(details).setName(definition.name);
+          const description = (value) => [definition.desc, key === "hover" ? "Artwork only. Motion is disabled for reduced motion and touch." : "", definition.unit ? `Current value: ${value}${definition.unit}` : ""].filter(Boolean).join(" ");
+          setting.setDesc(description(options[key]));
+          const update = (value) => this.runChange(async () => {
+            this.plugin.presentation.setShapeOptions(shape, { [key]: value });
+            setting.setDesc(description(value));
+            this.plugin.applyCustomization();
+            this.refreshProfilePreview(context);
+            await this.persistChange(context, true);
+          });
+          if (definition.options) setting.addDropdown((dropdown) => {
+            for (const value of definition.options) dropdown.addOption(value, HOVER_EFFECTS[value] || value);
+            dropdown.setValue(options[key]).onChange(update);
+          });
+          else if (typeof definition.default === "boolean") setting.addToggle((toggle) => toggle.setValue(options[key]).onChange(update));
+          else setting.addSlider((slider) => slider.setLimits(definition.min, definition.max, definition.step || 1).setValue(options[key]).setDynamicTooltip().onChange(update));
+        }
+        new Setting(details).setName("Reset this shape").addButton((button) => button.setButtonText("Reset").onClick(() => this.runChange(async () => {
+          this.plugin.presentation.resetShape(shape);
+          this.plugin.applyCustomization();
+          this.refreshAllViews();
+          await this.persistChange(context, true);
+        })));
+      }
+      displayCardShapeTarget(containerEl, context) {
+        const controller = this.plugin.moduleManager.controllers?.get("bases");
+        const views = controller?.getShapeViews?.() || [];
+        new Setting(containerEl).setName("Temporary shape target").setDesc("Select one open cards pane. Other Bases panes stay unchanged. Selection is not saved: reselect after restart, profile changes, reopening, or a detected cards-layout replacement. This is pane-scoped preview, not a persistent saved-view rule.").addDropdown((dropdown) => {
+          dropdown.addOption("", "None (do not apply shapes)");
+          for (const view of views) dropdown.addOption(view.id, view.name);
+          dropdown.setValue(controller?.shapeTarget?.id || "").onChange((id) => this.runChange(async () => {
+            controller?.selectShapeTarget(id);
+            this.refreshOtherViews(context);
+          }));
+        }).addButton((button) => button.setButtonText("Refresh panes").onClick(() => {
+          this.plugin.moduleManager.refreshWithNotice?.();
+          this.refreshDisplay(context);
+        }));
+        containerEl.createEl("p", { cls: "cs-compatibility-note", text: "Shapes use Bases card-cover classes. Check your real vault, embeds and mobile before relying on them. Metadata stays outside the cover. No notes or cover images are changed." });
       }
       displayControl(containerEl, module3, profile, control, context) {
         const value = profile.modules[module3.id][control.key];
@@ -2948,23 +3771,31 @@ var require_settings_tab = __commonJS({
         const setting = new Setting(containerEl).setName(control.name);
         if (control.desc) setting.setDesc(control.desc);
         else if (control.unit) setting.setDesc(`Current value: ${value}${control.unit}`);
-        const update = (next) => this.updateModule(module3.id, { [control.key]: next }, context);
+        const update = async (next) => {
+          if (control.unit) setting.setDesc(`Current value: ${next}${control.unit}`);
+          await this.updateModule(module3.id, { [control.key]: next }, context, module3.id === "bases" && control.key === "cardsShape");
+        };
         if (control.type === "color") {
           setting.addColorPicker((picker) => picker.setValue(value).onChange(update));
         } else if (control.type === "boolean") {
-          setting.addToggle((toggle) => toggle.setValue(value).onChange(update));
+          setting.addToggle((toggle) => {
+            if (control.key === "useThemeColors" && context) context.themeColorToggle = { id: module3.id, toggle };
+            return toggle.setValue(value).onChange(update);
+          });
         } else if (control.type === "range") {
           setting.addSlider((slider) => slider.setLimits(schema.min, schema.max, schema.step || 1).setValue(value).setDynamicTooltip().onChange(update));
         } else if (control.type === "select") {
           setting.addDropdown((dropdown) => {
-            for (const option of schema.options) dropdown.addOption(option, option);
+            for (const option of schema.options) dropdown.addOption(option, module3.id === "bases" && control.key === "cardsShape" ? CARD_SHAPES[option] : option);
             dropdown.setValue(value).onChange(update);
           });
         } else if (control.type === "text") {
           setting.addText((text) => {
             text.setPlaceholder("Assets/cover.jpg or https://example.com/cover.jpg").setValue(value);
             text.inputEl.type = "text";
-            text.inputEl.addEventListener("blur", () => update(text.getValue().trim()));
+            const change = () => update(text.getValue().trim());
+            text.onChange(() => this.queueLiveInput(text.inputEl, change));
+            text.inputEl.addEventListener("blur", () => this.flushLiveInput(text.inputEl));
           });
         }
       }
@@ -3000,15 +3831,25 @@ var require_settings_tab = __commonJS({
           await this.persistChange(context, true);
         });
       }
-      updateModule(moduleId, update, context) {
+      updateModule(moduleId, update, context, refreshAfter = false) {
         return this.runChange(async () => {
           this.plugin.profileManager.updateModuleSettings(moduleId, update);
           this.plugin.applyCustomization();
           this.refreshProfilePreview(context);
+          if (refreshAfter) this.refreshDisplay(context);
           await this.persistChange(context, true);
         });
       }
       refreshProfilePreview(context) {
+        const selected = this.plugin.profileManager.getActiveProfile();
+        if (context?.integrationEnabledToggle) {
+          const { id, toggle } = context.integrationEnabledToggle;
+          toggle.setValue(selected.moduleEnabled[id] !== false);
+        }
+        if (context?.themeColorToggle) {
+          const { id, toggle } = context.themeColorToggle;
+          toggle.setValue(selected.modules[id].useThemeColors);
+        }
         if (!context?.preview) return;
         const profile = this.plugin.profileManager.getActiveProfile();
         context.preview.name.textContent = profile.name;
@@ -3026,7 +3867,7 @@ var require_settings_tab = __commonJS({
           swatch.setAttribute("aria-label", `${label}: ${value}`);
         }
         const enabledModules = MODULES.filter((module3) => profile.moduleEnabled[module3.id] !== false).map((module3) => module3.name);
-        context.preview.moduleSummary.textContent = enabledModules.length ? `Enabled modules: ${enabledModules.join(", ")}` : "No modules enabled.";
+        context.preview.moduleSummary.textContent = enabledModules.length ? `${this.plugin.settingsManager.settings.customizationEnabled === false ? "Configured" : "Enabled"} modules: ${enabledModules.join(", ")}` : "No modules enabled.";
         context.preview.name.parentElement?.setAttribute(
           "aria-label",
           `Active profile: ${profile.name}`
@@ -3078,6 +3919,7 @@ var { SettingsManager } = require_settings_manager();
 var { ProfileManager } = require_profile_manager();
 var { ThemeEngine } = require_theme_engine();
 var { ModuleManager } = require_module_manager();
+var { PresentationManager } = require_presentation_manager();
 var { CustomizationSettingTab } = require_settings_tab();
 var { CustomizationStudioModal } = require_settings_modal();
 module.exports = class CustomizationStudioPlugin extends Plugin {
@@ -3089,7 +3931,11 @@ module.exports = class CustomizationStudioPlugin extends Plugin {
       this.settingsManager = new SettingsManager(this);
       await this.settingsManager.load();
       this.profileManager = new ProfileManager(this.settingsManager);
-      if (this.profileManager.load()) await this.settingsManager.save();
+      this.profileManager.load();
+      this.presentation = new PresentationManager(this);
+      const initialized = await this.presentation.load();
+      this.profileManager.presentation = this.presentation;
+      if (initialized) await this.settingsManager.save();
       this.themeEngine = new ThemeEngine(this);
       await this.themeEngine.loadCoreCss();
       this.moduleManager = new ModuleManager(this);
@@ -3099,6 +3945,7 @@ module.exports = class CustomizationStudioPlugin extends Plugin {
       this.register(() => this.settingsTab.dispose());
       this.settingsModal = new CustomizationStudioModal(this.app, this.settingsTab);
       this.registerCustomizationEntryPoints();
+      this.watchAppearance();
       this.applyCustomization();
       this.app.workspace.onLayoutReady(() => this.moduleManager.refreshWithNotice());
     } catch (error) {
@@ -3109,9 +3956,77 @@ module.exports = class CustomizationStudioPlugin extends Plugin {
     }
   }
   applyCustomization() {
+    if (this.unloading) return;
+    if (this.settingsManager.settings.customizationEnabled === false) {
+      this.moduleManager.pause();
+      this.themeEngine.pause();
+      this.queueLiveRefresh(true);
+      return;
+    }
+    const meta = this.presentation?.meta();
+    if (meta?.neutral && meta.mode === "auto") {
+      if (this.themeEngine.appliedProfileId && this.themeEngine.appliedProfileId !== this.settingsManager.settings.activeProfileId) this.themeEngine.pause();
+      this.presentation.refreshInheritedPalette();
+    }
     const profile = this.profileManager.getActiveProfile();
     this.themeEngine.apply(profile);
     this.moduleManager.refresh(profile);
+    if (this.presentation?.pendingShapeTarget) {
+      this.presentation.pendingShapeTarget = false;
+      this.moduleManager.controllers?.get("bases")?.autoSelectShapeTarget?.();
+    }
+    this.queueLiveRefresh();
+  }
+  queueLiveRefresh(force = false) {
+    if (!this.app?.workspace?.trigger) return;
+    if (this.liveRefreshTimer !== void 0 && this.liveRefreshTimer !== null) clearTimeout(this.liveRefreshTimer);
+    this.liveRefreshTimer = setTimeout(() => {
+      this.liveRefreshTimer = null;
+      if (this.unloading || !force && this.settingsManager.settings.customizationEnabled === false) return;
+      const bases = this.moduleManager.controllers?.get("bases"), target = bases?.shapeTarget;
+      this.broadcastingCssChange = true;
+      try {
+        this.app.workspace.trigger?.("css-change");
+        this.app.workspace.trigger?.("resize");
+      } finally {
+        this.broadcastingCssChange = false;
+      }
+      if (target && bases.shapeTarget === target && bases.roots.has(target.root)) {
+        const group = target.root.querySelector(".bases-cards-group");
+        if (group) target.group = group;
+        bases.syncShapeTarget();
+        bases.updateStyle();
+      }
+    }, 16);
+  }
+  watchAppearance() {
+    this.lastHostMode = this.presentation.hostMode();
+    const changed = () => {
+      if (this.unloading || this.broadcastingCssChange || this.settingsManager.settings.customizationEnabled === false) return;
+      const mode = this.presentation.hostMode();
+      if (mode === this.lastHostMode) return;
+      this.lastHostMode = mode;
+      this.themeEngine.pause();
+      this.applyCustomization();
+      this.settingsTab?.refreshAllViews();
+    };
+    const doc = this.app.workspace.containerEl.ownerDocument, Observer = doc.defaultView?.MutationObserver;
+    if (Observer) {
+      const observer = new Observer(changed);
+      observer.observe(doc.body, { attributes: true, attributeFilter: ["class"] });
+      this.register(() => observer.disconnect());
+    }
+    this.registerEvent(this.app.workspace.on("css-change", changed));
+    const media = doc.defaultView?.matchMedia?.("(prefers-color-scheme: dark)");
+    media?.addEventListener?.("change", changed);
+    this.register(() => media?.removeEventListener?.("change", changed));
+  }
+  async setCustomizationEnabled(enabled) {
+    if (typeof enabled !== "boolean") throw new Error("Customization state must be a boolean.");
+    this.settingsManager.settings.customizationEnabled = enabled;
+    this.applyCustomization();
+    this.settingsTab?.refreshAllViews();
+    await this.settingsManager.scheduleSave();
   }
   async saveCustomization() {
     this.applyCustomization();
@@ -3130,13 +4045,19 @@ module.exports = class CustomizationStudioPlugin extends Plugin {
     this.register(() => ribbonIcon.remove());
   }
   cleanup() {
+    this.unloading = true;
+    if (this.liveRefreshTimer !== void 0 && this.liveRefreshTimer !== null) clearTimeout(this.liveRefreshTimer);
+    this.liveRefreshTimer = null;
     this.moduleManager?.unload();
     this.themeEngine?.unload();
+    this.app?.workspace?.trigger?.("css-change");
+    this.app?.workspace?.trigger?.("resize");
   }
   async onunload() {
     let saveError;
     try {
       this.settingsModal?.close();
+      await this.settingsTab?.flushLiveInputs?.();
       if (this.settingsTab?.captureViewState()) await this.settingsManager?.save();
       await this.settingsManager?.flush();
     } catch (error) {

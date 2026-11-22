@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.2.0
+
+- Add neutral Default profile, Light/Dark/Auto profile variants, per-shape Bases card settings, import/export of variants, and master pause.
+- Fix repeating EEXIST notice when saving studio-appearance.json.bak.
+
 ## Unreleased
 
 - Preserve successive Kanban column color edits and Clear actions in one settings view.

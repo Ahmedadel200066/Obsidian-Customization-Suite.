@@ -1,7 +1,7 @@
 {
   "id": "customization-studio",
   "name": "Customization Studio",
-  "version": "0.1.1",
+  "version": "1.2.0",
   "minAppVersion": "1.9.0",
   "description": "Customize supported plugin interfaces with visual profiles and scoped CSS.",
   "author": "Ahmed Adel",

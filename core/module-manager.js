@@ -27,7 +27,7 @@ class ModuleManager {
     for (const module of this.modules) {
       const controller = module.createController(this.plugin, this, module);
       this.controllers.set(module.id, controller);
-      controller.start();
+      if (this.plugin.settingsManager?.settings.customizationEnabled !== false) controller.start();
     }
     const workspace = this.plugin.app.workspace;
     this.plugin.registerEvent(workspace.on("layout-change", () => this.refreshWithNotice()));
@@ -46,6 +46,7 @@ class ModuleManager {
   }
 
   watchDocuments() {
+    if (this.plugin.settingsManager?.settings.customizationEnabled === false) return;
     const documents = this.getDocuments();
     for (const [doc, observer] of this.documents) {
       if (!documents.has(doc)) {
@@ -97,12 +98,22 @@ class ModuleManager {
     return controller?.getColumnNames?.() || [];
   }
 
+  pause() {
+    if (this.pendingRefresh !== null) clearTimeout(this.pendingRefresh);
+    this.pendingRefresh = null;
+    for (const observer of this.documents.values()) observer?.disconnect();
+    this.documents.clear();
+    for (const controller of this.controllers.values()) controller.deactivate();
+  }
+
   refresh(profile = this.plugin.profileManager.getActiveProfile()) {
+    if (this.plugin.settingsManager?.settings.customizationEnabled === false) { this.pause(); return; }
     this.watchDocuments();
     for (const controller of this.controllers.values()) controller.refresh(profile);
   }
 
   refreshWithNotice() {
+    if (this.plugin.settingsManager?.settings.customizationEnabled === false) { this.pause(); return; }
     try {
       const profile = this.plugin.profileManager.getActiveProfile();
       this.plugin.themeEngine?.apply(profile);

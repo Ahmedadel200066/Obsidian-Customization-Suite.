@@ -1,6 +1,9 @@
 const { createDefaults, validateSettings } = require("../settings-utils");
 
+const { CARD_SHAPES } = require("./card-shapes");
+
 const SCHEMA = {
+  cardsShape: { type: "select", default: "standard", options: Object.keys(CARD_SHAPES) },
   tableTextSize: { type: "range", default: 14, min: 10, max: 24 },
   tableRowHeight: { type: "range", default: 36, min: 24, max: 80 },
   tableMinColumnWidth: { type: "range", default: 40, min: 24, max: 320 },
@@ -58,6 +61,7 @@ const CONTROL_GROUPS = [
   {
     name: "Cards and gallery",
     controls: [
+      { key: "cardsShape", name: "Card shape", type: "select", desc: "Standard keeps native artwork unless you change its size or hover effect. Shape edits use the active or sole visible cards pane; choose Temporary shape target if ambiguous. This is session/pane scoped. Circle crops artwork; Spine has a separate reveal control and stays open on touch." },
       { key: "cardsContainerBackground", name: "Gallery background", type: "color" },
       { key: "cardsBackground", name: "Card background", type: "color" },
       { key: "cardsCoverBackground", name: "Cover background", type: "color" },

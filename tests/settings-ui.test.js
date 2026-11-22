@@ -199,6 +199,12 @@ test("settings UI renders visual controls and previews/persists module edits", a
   tab.refreshDisplay(context);
   assert.ok(FakeSetting.records.some((setting) => setting.name === "Row height"));
   assert.ok(FakeSetting.records.some((setting) => setting.name === "Group spacing"));
+  const shapes = FakeSetting.actions.find((action) => action.name === "Card shape");
+  assert.deepEqual(shapes.component.options.map(([, label]) => label),
+    ["Standard", "Book", "Poster", "Circle", "Spine", "Polaroid", "Trading card", "Disc", "Ticket"]);
+  assert.equal(shapes.component.value, "standard");
+  const target = FakeSetting.actions.find((action) => action.name === "Temporary shape target");
+  assert.deepEqual(target.component.options, [["", "None (do not apply shapes)"]]);
 
   tab.setViewState(context, { section: "global" });
   tab.refreshDisplay(context);
@@ -289,6 +295,20 @@ test("settings UI renders visual controls and previews/persists module edits", a
   assert.equal(context.preview.name.textContent, "Minimal");
   assert.equal(modalContext.preview.name.textContent, "Minimal");
 
+  const copy = FakeSetting.actions.filter(action => action.name === "Create profile").at(-1);
+  await copy.run();
+  assert.equal(profiles.getActiveProfile().name, "Minimal copy");
+  assert.equal(context.preview.name.textContent, "Minimal copy");
+  assert.equal(modalContext.preview.name.textContent, "Minimal copy");
+  plugin.setCustomizationEnabled = async enabled => {
+    settings.settings.customizationEnabled=enabled;plugin.applyCustomization();tab.refreshAllViews();
+    await plugin.settingsManager.scheduleSave();
+  };
+  await FakeSetting.actions.filter(action => action.name === "Customization").at(-1).run(false);
+  assert.equal(settings.settings.customizationEnabled,false);
+  assert.match(context.preview.moduleSummary.textContent,/^Configured:/);
+  assert.equal(FakeSetting.actions.filter(action => action.name === "Customization").at(-1).component.value,false);
+
   tab.releaseDisplayTarget(tab.containerEl);
   tab.releaseDisplayTarget(modalRoot);
   tab.dispose();
@@ -330,4 +350,11 @@ test("successive column color edits and Clear retain other unsaved-view edits", 
   });
   await todoClear.run();
   assert.deepEqual(profiles.getActiveProfile().modules.kanban.columnColors, { Done: "#abcdef" });
+});
+
+test('live text changes coalesce and can be flushed before unload',async()=>{
+ const {CustomizationSettingTab}=require('../core/settings-tab');const tab=new CustomizationSettingTab({containerEl:new FakeElement()},{}),element={},values=[];
+ tab.queueLiveInput(element,async()=>values.push('old'));tab.queueLiveInput(element,async()=>values.push('latest'));
+ assert.equal(tab.pendingInputs.size,1);await tab.flushLiveInputs();assert.deepEqual(values,['latest']);assert.equal(tab.pendingInputs.size,0);
+ await new Promise(resolve=>setTimeout(resolve,200));assert.deepEqual(values,['latest']);tab.dispose();
 });

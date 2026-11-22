@@ -34,6 +34,7 @@ class ThemeEngine {
     this.documentEngines = new Map();
     this.previousClassState = null;
     this.previousProfile = null;
+    this.appliedProfileId = null;
   }
 
   async loadCoreCss() {
@@ -64,6 +65,8 @@ class ThemeEngine {
   }
 
   apply(profile) {
+    if (this.plugin.settingsManager?.settings.customizationEnabled === false) { this.pause(); return; }
+    profile=this.plugin.presentation?.resolveProfile(profile.id,this.body)||profile;
     if (!this.isSecondaryDocument) {
       const documents = this.plugin.moduleManager?.getDocuments?.() || new Set([this.body.ownerDocument]);
       for (const [doc, engine] of this.documentEngines) {
@@ -84,55 +87,57 @@ class ThemeEngine {
         engine.apply(profile);
       }
     }
-    if (this.previousClassState === null) {
-      this.previousClassState = this.body.classList.contains("customization-studio-enabled");
+    const inherited=profile.studio?.neutral&&profile.studio.appearance==="auto";
+    const keys=inherited?profile.studio.globalKeys:Object.keys(profile.variables);
+    const declarations=[];
+    for(const [key,[customProperty,obsidianProperty]]of Object.entries(VARIABLE_MAP))if(keys.includes(key)){
+      declarations.push(`${customProperty}: ${profile.variables[key]};`,`${obsidianProperty}: var(${customProperty});`);
     }
-    if (this.previousProfile === null) {
-      this.previousProfile = this.body.dataset.customizationStudioProfile;
-    }
-    this.body.classList.add("customization-studio-enabled");
-    this.body.dataset.customizationStudioProfile = profile.id;
+    if(profile.studio&&!inherited){
+      const p=profile.studio.palette;
+      for(const [name,value]of Object.entries({"--background-primary-alt":p.secondary,"--background-secondary":p.secondary,"--background-secondary-alt":p.secondaryAlt,"--background-modifier-border":p.border,"--background-modifier-border-hover":p.muted,"--background-modifier-hover":p.hover,"--text-muted":p.muted,"--text-faint":p.faint,"--text-accent":p.accent,"--text-on-accent":p.onAccent,"--interactive-accent-hover":p.accent,"--interactive-normal":p.secondary,"--interactive-hover":p.hover,"--background-modifier-form-field":p.secondary}))declarations.push(`${name}: ${value};`);
+      declarations.push(`color-scheme: ${profile.studio.mode};`);
+    }else if(keys.includes("accentColor"))declarations.push(`--text-accent: ${profile.variables.accentColor};`);
+    const tab=[];
+    if(!inherited||keys.includes("tabBarOpacity"))tab.push(`background-color: ${profile.variables.tabBarOpacity===0?"transparent":colorWithOpacity(profile.variables.surfaceColor,profile.variables.tabBarOpacity/100)};`);
+    if(!inherited||keys.some(k=>k.startsWith("tabBarGradient")))tab.push(`background-image: ${tabBarGradient(profile.variables)};`);
+    if(!inherited||keys.includes("tabBarBlur"))tab.push(`backdrop-filter: blur(${profile.variables.tabBarBlur}px);`,`-webkit-backdrop-filter: blur(${profile.variables.tabBarBlur}px);`);
+    if(!declarations.length&&!tab.length&&!profile.customCss){this.clearEffects(true);return;}
+    if(this.previousClassState===null)this.previousClassState=this.body.classList.contains("customization-studio-enabled");
+    if(this.previousProfile===null)this.previousProfile=this.body.dataset.customizationStudioProfile;
+    this.body.classList.add("customization-studio-enabled");this.body.dataset.customizationStudioProfile=profile.id;this.appliedProfileId=profile.id;
+    const selector=`body.customization-studio-enabled[data-customization-studio-profile="${profile.id}"]`;
+    this.setStyle("variables",`${selector}{${declarations.join("\n")}}${tab.length?`${selector} .workspace-tab-header-container{${tab.join("\n")}}`:""}`);
+    this.setStyle("profile",profile.customCss||"");
+  }
 
-    const declarations = [];
-    for (const [key, [customProperty, obsidianProperty]] of Object.entries(VARIABLE_MAP)) {
-      const value = profile.variables[key];
-      if (value) {
-        declarations.push(`${customProperty}: ${value};`);
-        declarations.push(`${obsidianProperty}: var(${customProperty});`);
+  clearEffects(keepCore = false) {
+    if (this.previousClassState !== null) {
+      if (this.previousClassState === false) this.body.classList.remove("customization-studio-enabled");
+      if (this.body.dataset.customizationStudioProfile === this.appliedProfileId) {
+        if (this.previousProfile === undefined) delete this.body.dataset.customizationStudioProfile;
+        else this.body.dataset.customizationStudioProfile = this.previousProfile;
       }
     }
-    this.setStyle(
-      "variables",
-      `body.customization-studio-enabled[data-customization-studio-profile="${profile.id}"] {\n  ${declarations.join("\n  ")}\n}\n` +
-      `body.customization-studio-enabled[data-customization-studio-profile="${profile.id}"] .workspace-tab-header-container {\n` +
-      `  background-color: ${profile.variables.tabBarOpacity === 0
-        ? "transparent"
-        : colorWithOpacity(profile.variables.surfaceColor, profile.variables.tabBarOpacity / 100)};\n` +
-      `  background-image: ${tabBarGradient(profile.variables)};\n` +
-      `  backdrop-filter: blur(${profile.variables.tabBarBlur}px);\n` +
-      `  -webkit-backdrop-filter: blur(${profile.variables.tabBarBlur}px);\n` +
-      `}`
-    );
-    this.setStyle("profile", profile.customCss || "");
+    for (const [id, style] of this.styles) {
+      if (keepCore && id === "core") continue;
+      if (style.parentNode) style.remove();
+      this.styles.delete(id);
+    }
+    this.previousClassState = null;
+    this.previousProfile = null;
+    this.appliedProfileId = null;
+  }
+
+  pause() {
+    for (const engine of this.documentEngines.values()) engine.pause();
+    this.clearEffects(true);
   }
 
   unload() {
     for (const engine of this.documentEngines.values()) engine.unload();
     this.documentEngines.clear();
-    if (this.previousClassState === false) {
-      this.body.classList.remove("customization-studio-enabled");
-    }
-    if (this.previousProfile === undefined) {
-      delete this.body.dataset.customizationStudioProfile;
-    } else if (this.body.dataset.customizationStudioProfile === this.plugin.profileManager?.getActiveProfile()?.id) {
-      this.body.dataset.customizationStudioProfile = this.previousProfile;
-    }
-    for (const style of this.styles.values()) {
-      if (style.parentNode) style.remove();
-    }
-    this.styles.clear();
-    this.previousClassState = null;
-    this.previousProfile = null;
+    this.clearEffects(false);
   }
 }
 

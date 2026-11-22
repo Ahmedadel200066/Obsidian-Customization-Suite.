@@ -86,3 +86,24 @@ test("ribbon action opens the settings modal and registered cleanup closes it", 
     ["release", contentEl]
   ]);
 });
+
+test("master switch applies pause/resume without unloading plugin and persists state", async () => {
+  const PluginClass=require("../src/main.js");const plugin=new PluginClass();
+  let themeApplied=0,modulesApplied=0,themePaused=0,modulesPaused=0,saves=0,ui=0;
+  plugin.settingsManager={settings:{customizationEnabled:true},scheduleSave:async()=>{saves++;}};
+  plugin.profileManager={getActiveProfile:()=>({id:"test"})};
+  plugin.themeEngine={apply(){themeApplied++;},pause(){themePaused++;}};
+  plugin.moduleManager={refresh(){modulesApplied++;},pause(){modulesPaused++;}};
+  plugin.settingsTab={refreshAllViews(){ui++;}};
+  await plugin.setCustomizationEnabled(false);
+  assert.equal(themePaused,1);assert.equal(modulesPaused,1);assert.equal(themeApplied,0);assert.equal(modulesApplied,0);
+  plugin.applyCustomization();assert.equal(themeApplied,0);assert.equal(modulesApplied,0);
+  await plugin.setCustomizationEnabled(true);assert.equal(themeApplied,1);assert.equal(modulesApplied,1);
+  assert.equal(saves,2);assert.equal(ui,2);await assert.rejects(()=>plugin.setCustomizationEnabled("yes"),/boolean/);
+});
+
+test('a queued UI callback cannot revive styles after unload',()=>{
+ const PluginClass=require('../src/main.js'),plugin=new PluginClass();plugin.unloading=true;
+ plugin.themeEngine={apply(){throw Error('style revival');}};plugin.moduleManager={refresh(){throw Error('observer revival');}};
+ assert.equal(plugin.applyCustomization(),undefined);
+});

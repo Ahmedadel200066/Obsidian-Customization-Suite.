@@ -88,6 +88,11 @@ class KanbanController extends BaseModuleController {
   }
 
   updateColumnDecorations(roots) {
+    const keys=this.profile?.studio?.moduleKeys.kanban||[];
+    if(this.profile?.studio?.neutral&&!keys.some(key=>["columnColors","automaticColumnColors"].includes(key))){
+      for(const [element,record]of this.markedColumns)this.restoreColumnMarker(element,record);
+      this.columnColorTokens.clear();return;
+    }
     const active = new Set();
     const colorTokens = new Map();
     for (const root of roots) {
@@ -115,7 +120,7 @@ class KanbanController extends BaseModuleController {
     const manual = Object.entries(this.settings.columnColors)
       .find(([name]) => name.trim().toLowerCase() === normalized)?.[1];
     if (manual) return manual;
-    if (!this.settings.automaticColumnColors) return null;
+    if (!this.settings.automaticColumnColors || (this.profile?.studio?.neutral&&!this.profile.studio.moduleKeys.kanban?.includes("automaticColumnColors"))) return null;
     return AUTOMATIC_COLORS.find(({ words }) => words.includes(normalized))?.color || null;
   }
 
