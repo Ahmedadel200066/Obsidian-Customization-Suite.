@@ -7,6 +7,8 @@ on:
 
 permissions:
   contents: write
+  id-token: write
+  attestations: write
 
 concurrency:
   group: plugin-release-${{ github.ref }}
@@ -42,20 +44,13 @@ jobs:
       - name: Confirm generated assets match committed source
         run: git diff --exit-code -- main.js styles.css
 
-      - name: Create and verify installable ZIP
-        run: |
-          zip -q "$RUNNER_TEMP/Customization-Studio.zip" main.js manifest.json styles.css LICENSE
-          python3 - "$RUNNER_TEMP/Customization-Studio.zip" <<'PY'
-          import sys
-          from zipfile import ZipFile
-          with ZipFile(sys.argv[1]) as archive:
-              expected = {"main.js", "manifest.json", "styles.css", "LICENSE"}
-              if set(archive.namelist()) != expected:
-                  raise SystemExit("ZIP does not contain exactly the standard runtime files and license")
-              if archive.testzip() is not None:
-                  raise SystemExit("ZIP integrity check failed")
-          print("Runtime ZIP verified.")
-          PY
+      - name: Attest standard release assets
+        uses: actions/attest@v4
+        with:
+          subject-path: |
+            main.js
+            manifest.json
+            styles.css
 
       - name: Create draft release and attach standard assets
         env:
@@ -72,5 +67,8 @@ jobs:
             gh release create "$RELEASE_TAG" --verify-tag --draft \
               --title "Customization Studio $RELEASE_TAG" --notes-file RELEASE_NOTES.md
           fi
-          gh release upload "$RELEASE_TAG" main.js manifest.json styles.css LICENSE "$RUNNER_TEMP/Customization-Studio.zip" --clobber
+          gh release upload "$RELEASE_TAG" main.js manifest.json styles.css --clobber
+          # Do not publish unexpected legacy extras if retrying a draft.
+          gh release view "$RELEASE_TAG" --json assets > "$RUNNER_TEMP/release-assets.json"
+          node -e 'const fs = require("node:fs"); const names = JSON.parse(fs.readFileSync(process.argv[1], "utf8")).assets.map(a => a.name).sort(); if (JSON.stringify(names) !== JSON.stringify(["main.js", "manifest.json", "styles.css"])) throw new Error("Expected exactly three standard release assets");' "$RUNNER_TEMP/release-assets.json"
           gh release edit "$RELEASE_TAG" --draft=false --latest

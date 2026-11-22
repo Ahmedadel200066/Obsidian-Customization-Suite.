@@ -25,9 +25,9 @@ Publishing source to GitHub alone does not add a plugin to Community Plugins.
 7. Update RELEASE_NOTES.md, then push a tag that exactly matches
    manifest.version, without an extra `v` prefix. The tag-triggered workflow
    builds, tests, validates versions.json, and publishes the GitHub release
-   with `main.js`, `manifest.json`, and `styles.css` individually. It also
-   attaches LICENSE and an optional install ZIP. A ZIP is not a substitute for
-   the individual assets. Build provenance attestations are recommended.
+   with exactly `main.js`, `manifest.json`, and `styles.css` individually. It
+   attests those files using GitHub build provenance. LICENSE stays in the
+   repository and its full notice is in main.js, not an extra release asset.
 8. Download those exact release assets into a clean plugin directory and test
    them, rather than testing from a full development checkout that can hide
    missing files. The release workflow has not been run by these local tests.

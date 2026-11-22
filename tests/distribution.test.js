@@ -26,8 +26,8 @@ test("support uses the owner-approved destination in manifest and README, not a 
   assert.equal(read("core/settings-tab.js").includes("buymeacoffee.com"), false);
 });
 
-test("release workflow attaches standard assets individually as well as the ZIP", () => {
-  assert.match(read(".github/workflows/release.yml"), /gh release upload[^\n]*main\.js manifest\.json styles\.css LICENSE/);
+test("release workflow attaches only the three standard assets", () => {
+  assert.match(read(".github/workflows/release.yml"), /gh release upload "\$RELEASE_TAG" main\.js manifest\.json styles\.css --clobber/);
 });
 
 
@@ -46,4 +46,32 @@ test("release workflow runs on tags and publishes only after verified draft asse
   assert.match(workflow, /git diff --exit-code -- main\.js styles\.css/);
   assert.ok(workflow.indexOf("gh release upload") < workflow.indexOf("gh release edit"));
   assert.match(workflow, /Refusing to replace its assets/);
+});
+
+
+test("manifest description follows the observed directory scan rule", () => {
+  const manifest = JSON.parse(read("manifest.json"));
+  assert.doesNotMatch(manifest.description, /obsidian/i);
+  assert.ok(manifest.description.length <= 250 && manifest.description.endsWith("."));
+});
+
+test("release provenance covers the exact three assets before upload without extra release files", () => {
+  const workflow = read(".github/workflows/release.yml");
+  assert.match(workflow, /id-token: write/);
+  assert.match(workflow, /attestations: write/);
+  assert.match(workflow, /actions\/attest@v4/);
+  assert.match(workflow, /subject-path: \|\s+main\.js\s+manifest\.json\s+styles\.css/);
+  assert.ok(workflow.indexOf("actions/attest@v4") < workflow.indexOf("gh release upload"));
+  assert.doesNotMatch(workflow, /Customization-Studio\.zip|styles\.css LICENSE/);
+  assert.match(workflow, /Expected exactly three standard release assets/);
+});
+
+test("active-tab CSS keeps its fallback without duplicate background declarations", () => {
+  const css = read("styles/core.css");
+  for (const match of css.matchAll(/\{([^{}]*)\}/g)) {
+    const backgrounds = [...match[1].matchAll(/(?:^|;)\s*background\s*:/g)];
+    assert.ok(backgrounds.length <= 1, "No rule may declare background twice");
+  }
+  assert.match(css, /@supports \(background: color-mix/);
+  assert.match(css, /background: var\(--background-modifier-hover\)/);
 });

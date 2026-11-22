@@ -8,6 +8,8 @@ async function validateRelease(root, tag) {
   const pkg = await readJson("package.json");
   const versions = await readJson("versions.json");
   assert.match(tag || "", /^\d+\.\d+\.\d+$/, "Release tag must be x.y.z without a v prefix");
+  assert.ok(!/obsidian/i.test(manifest.description), "Manifest description must not include Obsidian");
+  assert.ok(manifest.description.length <= 250 && manifest.description.endsWith("."), "Manifest description must be short and end with a period");
   assert.equal(manifest.version, tag, "Release tag must equal manifest.version");
   assert.equal(pkg.version, tag, "package.json must match the release version");
   assert.equal(versions[tag], manifest.minAppVersion, "versions.json must record the minimum compatible app version");

@@ -89,8 +89,14 @@
   border-bottom-color: var(--interactive-accent);
   color: var(--text-normal);
   background: var(--background-modifier-hover);
-  background: color-mix(in srgb, var(--interactive-accent) 12%, transparent);
   font-weight: var(--font-semibold, 600);
+}
+
+@supports (background: color-mix(in srgb, black 12%, transparent)) {
+  .customization-studio-settings .cs-primary-tabs button.is-active,
+  .customization-studio-settings .cs-integration-tabs button.is-active {
+    background: color-mix(in srgb, var(--interactive-accent) 12%, transparent);
+  }
 }
 
 .customization-studio-settings .cs-primary-panel,
