@@ -2,8 +2,26 @@
 
 ## 1.2.0
 
-- Add neutral Default profile, Light/Dark/Auto profile variants, per-shape Bases card settings, import/export of variants, and master pause.
-- Fix repeating EEXIST notice when saving studio-appearance.json.bak.
+### Added
+
+- Neutral, editable Default profile created from the current appearance on first run.
+- Create new profiles from Default; explicit Duplicate for presets.
+- Follow Obsidian, Light, or Dark per profile, with separate Light and Dark values and paired preset palettes.
+- Master Enabled/Paused toggle.
+- Nine Bases card shapes (Standard, Book, Poster, Circle, Spine, Polaroid, Trading card, Disc, Ticket) with per-shape controls.
+- Artwork size (50% to 150%) for every shape and optional Glow, Lift, Flip artwork, and Wiggle hover effects (default Off).
+- Instant apply and live re-measurement of native card layouts.
+- Export and import of both variants and shape settings; Legacy JSON export.
+- `studio-appearance.json` with backup and interrupted-save recovery.
+
+### Changed
+
+- Refined the Book shape.
+
+### Fixed
+
+- Card text and metadata staying in front of the artwork.
+- Repeating "EEXIST: file already exists" notice when saving `studio-appearance.json.bak`; a failed backup no longer blocks saving.
 
 ## Unreleased
 

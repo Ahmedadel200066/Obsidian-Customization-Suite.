@@ -25,8 +25,17 @@ Screenshots are not available yet.
 
 - Five built-in appearance presets: Minimal, Dark Academia, Glassmorphism,
   Colorful, and Focus Mode.
-- Custom profiles can be created, duplicated, renamed, deleted, imported,
-  exported, and switched.
+- A neutral, editable Default profile created from your current appearance,
+  so enabling the plugin changes nothing until you adjust a setting.
+- Custom profiles can be created from Default, duplicated, renamed, deleted,
+  imported, exported, and switched.
+- Follow Obsidian, Light, or Dark per profile, with separate Light and Dark
+  values and paired preset palettes.
+- A master Enabled/Paused toggle that keeps your profiles.
+- Nine Bases card shapes (Standard, Book, Poster, Circle, Spine, Polaroid,
+  Trading card, Disc, Ticket) with per-shape controls, artwork size, and
+  optional Glow, Lift, Flip artwork, or Wiggle hover effects. Changes apply
+  instantly.
 - Global accent, surface, and text colors; profile-level custom CSS.
 - Tab-header-only background transparency, backdrop blur, and configurable
   linear, elliptical radial, or circular radial gradients.

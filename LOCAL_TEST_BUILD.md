@@ -38,4 +38,3 @@ New settings live in `studio-appearance.json`, with a `.bak` and an interrupted-
 
 The browser checks use actual Obsidian 1.15.1 CSS with a simulated host and native-style card positioning. They are not a test in your real vault. Your vault remains the final check before any push or release.
 
-No commit, push, merge, tag, release, or version bump is included.
