@@ -38,6 +38,8 @@ var require_settings_manager = __commonJS({
       activeProfileId: "minimal",
       customProfiles: [],
       moduleEnabled: {},
+      lastSeenVersion: null,
+      showWhatsNew: true,
       uiState: {
         settingsTab: { section: "profiles", moduleId: "kanban", scrollTop: 0 },
         ribbonModal: { section: "profiles", moduleId: "kanban", scrollTop: 0 }
@@ -83,6 +85,7 @@ var require_settings_manager = __commonJS({
       }
       async load() {
         const data = await this.plugin.loadData();
+        this.freshInstall = data == null;
         if (data == null) {
           this.settings = {
             ...DEFAULT_SETTINGS,
@@ -114,8 +117,18 @@ var require_settings_manager = __commonJS({
             throw new Error(`Customization Studio moduleEnabled.${moduleId} must be a boolean.`);
           }
         }
+        const lastSeenVersion = data.lastSeenVersion ?? null;
+        if (lastSeenVersion !== null && (typeof lastSeenVersion !== "string" || !/^\d{1,6}\.\d{1,6}\.\d{1,6}$/.test(lastSeenVersion))) {
+          throw new Error("Customization Studio lastSeenVersion must be a version like 1.2.0.");
+        }
+        const showWhatsNew = data.showWhatsNew ?? true;
+        if (typeof showWhatsNew !== "boolean") {
+          throw new Error("Customization Studio showWhatsNew must be a boolean.");
+        }
         this.settings = {
           ...DEFAULT_SETTINGS,
+          lastSeenVersion,
+          showWhatsNew,
           customizationEnabled,
           activeProfileId,
           customProfiles,
@@ -3173,6 +3186,7 @@ var require_settings_tab = __commonJS({
         header.createEl("p", {
           text: customizationEnabled ? "Visual profiles for Obsidian and supported plugins. Settings preview immediately and save automatically." : "Customization is paused. You can edit profiles; effects return when enabled."
         });
+        new Setting(header).setName("What's new").setDesc("See the release notes for this version.").addButton((button) => button.setButtonText("Show what's new").onClick(() => this.plugin.showWhatsNew()));
         const activeProfile = this.plugin.profileManager.getActiveProfile();
         const profileHeader = header.createEl("div", {
           cls: "cs-active-profile-header",
@@ -3893,6 +3907,16 @@ var require_settings_tab = __commonJS({
 var require_settings_modal = __commonJS({
   "core/settings-modal.js"(exports2, module2) {
     var { Modal } = require("obsidian");
+    function applyModalScrollLayout(modalEl, contentEl, viewportHeight) {
+      const height = Number.isFinite(viewportHeight) && viewportHeight > 0 ? viewportHeight : 800;
+      const modalHeight = Math.max(100, Math.floor(height * 0.92));
+      const contentHeight = Math.max(60, modalHeight - 110);
+      const apply = (el, rules) => {
+        for (const [name, value] of Object.entries(rules)) el.style?.setProperty(name, value, "important");
+      };
+      apply(modalEl, { display: "flex", "flex-direction": "column", "max-height": `${modalHeight}px`, "min-height": "0", overflow: "hidden" });
+      apply(contentEl, { display: "block", position: "relative", flex: "1 1 auto", height: "auto", "min-height": "0", "max-height": `${contentHeight}px`, "overflow-x": "hidden", "overflow-y": "auto", "overscroll-behavior": "contain", "touch-action": "pan-y", "pointer-events": "auto" });
+    }
     var CustomizationStudioModal2 = class extends Modal {
       constructor(app, settingsTab) {
         super(app);
@@ -3902,14 +3926,142 @@ var require_settings_modal = __commonJS({
         this.setTitle("Customization Studio");
         this.modalEl.addClass("customization-studio-modal");
         this.contentEl.addClass("customization-studio-modal");
+        this.contentEl.setAttribute("tabindex", "0");
         this.settingsTab.displayInto(this.contentEl, "ribbonModal");
+        const win = this.contentEl.ownerDocument?.defaultView;
+        this.resizeScrollLayout = () => applyModalScrollLayout(this.modalEl, this.contentEl, win?.visualViewport?.height || win?.innerHeight);
+        this.resizeScrollLayout();
+        win?.addEventListener("resize", this.resizeScrollLayout);
+        win?.visualViewport?.addEventListener("resize", this.resizeScrollLayout);
+        this.removeScrollResize = () => {
+          win?.removeEventListener("resize", this.resizeScrollLayout);
+          win?.visualViewport?.removeEventListener("resize", this.resizeScrollLayout);
+        };
       }
       onClose() {
+        this.removeScrollResize?.();
+        this.removeScrollResize = null;
         this.settingsTab.releaseDisplayTarget(this.contentEl);
         this.contentEl.empty();
       }
     };
-    module2.exports = { CustomizationStudioModal: CustomizationStudioModal2 };
+    module2.exports = { CustomizationStudioModal: CustomizationStudioModal2, applyModalScrollLayout };
+  }
+});
+
+// core/whats-new.js
+var require_whats_new = __commonJS({
+  "core/whats-new.js"(exports2, module2) {
+    var SUPPORT_URL = "https://buymeacoffee.com/medoadel20y";
+    var WHATS_NEW = {
+      "1.3.0": {
+        summary: "A version-aware What's new dialog and more reliable scrolling in the ribbon settings modal.",
+        highlights: [
+          "See release highlights after an update, with no automatic dialog on a fresh install.",
+          "Reopen these notes from the Show what's new command or settings button.",
+          "Support development through the centered Buy Me a Coffee button.",
+          "Ribbon settings now keep their scroll area within the viewport, including when an older stylesheet is installed.",
+          "Scroll bounds adapt when the window or mobile viewport changes."
+        ]
+      },
+      "1.2.0": {
+        summary: "Light and Dark profiles, a neutral Default profile, and nine card shapes for Obsidian Bases.",
+        highlights: [
+          "Neutral, editable Default profile created from your current appearance. Nothing changes until you adjust a setting.",
+          "Follow Obsidian, Light, or Dark per profile, with separate Light and Dark values.",
+          "Nine Bases card shapes with their own controls, artwork size, and optional Glow, Lift, Flip artwork, or Wiggle hover effects.",
+          "Master Enabled/Paused switch. Changes apply instantly.",
+          "Export and import now include both variants and shape settings.",
+          'Fixed a repeating "file already exists" notice when saving settings.'
+        ]
+      }
+    };
+    function parseVersion(value) {
+      const match = /^(\d+)\.(\d+)\.(\d+)$/.exec(String(value));
+      return match ? match.slice(1).map(Number) : null;
+    }
+    function isNewerVersion(current, previous) {
+      const a = parseVersion(current), b = parseVersion(previous);
+      if (!a || !b) return false;
+      for (let i = 0; i < 3; i++) if (a[i] !== b[i]) return a[i] > b[i];
+      return false;
+    }
+    function whatsNewAction2({ freshInstall, lastSeenVersion, currentVersion, enabled = true, entries = WHATS_NEW }) {
+      if (freshInstall) return "record";
+      if (lastSeenVersion === currentVersion) return "none";
+      if (lastSeenVersion && !isNewerVersion(currentVersion, lastSeenVersion)) return "record";
+      if (!enabled || !entries[currentVersion]) return "record";
+      return "show";
+    }
+    module2.exports = { SUPPORT_URL, WHATS_NEW, isNewerVersion, whatsNewAction: whatsNewAction2 };
+  }
+});
+
+// core/whats-new-modal.js
+var require_whats_new_modal = __commonJS({
+  "core/whats-new-modal.js"(exports2, module2) {
+    var { Modal } = require("obsidian");
+    var { SUPPORT_URL, WHATS_NEW } = require_whats_new();
+    var WhatsNewModal2 = class extends Modal {
+      constructor(app, { version, entry = WHATS_NEW[version], showOnUpdate = true, onToggle = () => {
+      } }) {
+        super(app);
+        this.version = version;
+        this.entry = entry;
+        this.showOnUpdate = showOnUpdate;
+        this.onToggle = onToggle;
+      }
+      onOpen() {
+        this.setTitle(`What's new in Customization Studio ${this.version}`);
+        this.modalEl.addClass("customization-studio-whatsnew-modal");
+        const content = this.contentEl;
+        content.addClass("customization-studio-whatsnew");
+        if (!this.entry) {
+          content.createEl("p", { text: "There are no release notes for this version." });
+        } else {
+          content.createEl("p", { cls: "cs-whatsnew-summary", text: this.entry.summary });
+          const list = content.createEl("ul", { cls: "cs-whatsnew-list" });
+          for (const item of this.entry.highlights) list.createEl("li", { text: item });
+        }
+        const support = content.createEl("div", { cls: "cs-whatsnew-support" });
+        support.createEl("p", { text: "If Customization Studio is useful to you, you can support its development. It is optional, and every feature stays free." });
+        const coffee = support.createEl("a", {
+          cls: "cs-bmc-button",
+          attr: { href: SUPPORT_URL, target: "_blank", rel: "noopener", "aria-label": "Buy me a coffee (opens Buy Me a Coffee)" }
+        });
+        const svgNs = "http://www.w3.org/2000/svg";
+        const doc = coffee.ownerDocument;
+        const svg = doc.createElementNS(svgNs, "svg");
+        svg.setAttribute("viewBox", "0 0 24 24");
+        svg.setAttribute("width", "20");
+        svg.setAttribute("height", "20");
+        svg.setAttribute("aria-hidden", "true");
+        for (const [tag, attrs] of [
+          ["path", { d: "M5 8h12v5a5 5 0 0 1-5 5h-2a5 5 0 0 1-5-5z", fill: "#fff", stroke: "#0d0c22", "stroke-width": "1.8", "stroke-linejoin": "round" }],
+          ["path", { d: "M17 9h1.5a2.5 2.5 0 0 1 0 5H16.6", fill: "none", stroke: "#0d0c22", "stroke-width": "1.8", "stroke-linecap": "round" }],
+          ["path", { d: "M4 20.5h14", fill: "none", stroke: "#0d0c22", "stroke-width": "1.8", "stroke-linecap": "round" }],
+          ["path", { d: "M9 3.5c-.8 1 .8 1.5 0 2.5M13 3.5c-.8 1 .8 1.5 0 2.5", fill: "none", stroke: "#0d0c22", "stroke-width": "1.5", "stroke-linecap": "round" }]
+        ]) {
+          const node = doc.createElementNS(svgNs, tag);
+          for (const [name, value] of Object.entries(attrs)) node.setAttribute(name, value);
+          svg.appendChild(node);
+        }
+        coffee.appendChild(svg);
+        coffee.createEl("span", { text: "Buy me a coffee" });
+        const footer = content.createEl("div", { cls: "cs-whatsnew-footer" });
+        const label = footer.createEl("label", { cls: "cs-whatsnew-optout" });
+        const box = label.createEl("input", { attr: { type: "checkbox" } });
+        box.checked = !this.showOnUpdate;
+        box.addEventListener("change", () => this.onToggle(!box.checked));
+        label.createEl("span", { text: " Don't show this after updates" });
+        const close = footer.createEl("button", { cls: "mod-cta", text: "Close" });
+        close.addEventListener("click", () => this.close());
+      }
+      onClose() {
+        this.contentEl.empty();
+      }
+    };
+    module2.exports = { WhatsNewModal: WhatsNewModal2 };
   }
 });
 
@@ -3922,6 +4074,8 @@ var { ModuleManager } = require_module_manager();
 var { PresentationManager } = require_presentation_manager();
 var { CustomizationSettingTab } = require_settings_tab();
 var { CustomizationStudioModal } = require_settings_modal();
+var { WhatsNewModal } = require_whats_new_modal();
+var { whatsNewAction } = require_whats_new();
 module.exports = class CustomizationStudioPlugin extends Plugin {
   notifyUser(message) {
     new Notice(message);
@@ -3947,7 +4101,10 @@ module.exports = class CustomizationStudioPlugin extends Plugin {
       this.registerCustomizationEntryPoints();
       this.watchAppearance();
       this.applyCustomization();
-      this.app.workspace.onLayoutReady(() => this.moduleManager.refreshWithNotice());
+      this.app.workspace.onLayoutReady(() => {
+        this.moduleManager.refreshWithNotice();
+        this.checkWhatsNew();
+      });
     } catch (error) {
       console.error("Customization Studio failed to start.", error);
       new Notice(`Customization Studio failed to start: ${error.message}`);
@@ -4032,6 +4189,32 @@ module.exports = class CustomizationStudioPlugin extends Plugin {
     this.applyCustomization();
     return this.settingsManager.scheduleSave();
   }
+  showWhatsNew() {
+    const version = this.manifest?.version;
+    if (!version) return;
+    const settings = this.settingsManager.settings;
+    this.whatsNewModal?.close();
+    this.whatsNewModal = new WhatsNewModal(this.app, {
+      version,
+      showOnUpdate: settings.showWhatsNew !== false,
+      onToggle: (enabled) => {
+        settings.showWhatsNew = enabled;
+        this.settingsManager.scheduleSave().catch((error) => console.error("Customization Studio could not save the what's new preference.", error));
+      }
+    });
+    this.whatsNewModal.open();
+  }
+  checkWhatsNew() {
+    if (this.unloading) return;
+    const settings = this.settingsManager.settings, version = this.manifest?.version;
+    if (!version) return;
+    const action = whatsNewAction({ freshInstall: this.settingsManager.freshInstall, lastSeenVersion: settings.lastSeenVersion, currentVersion: version, enabled: settings.showWhatsNew !== false });
+    if (action === "none") return;
+    settings.lastSeenVersion = version;
+    this.settingsManager.freshInstall = false;
+    this.settingsManager.scheduleSave().catch((error) => console.error("Customization Studio could not remember the last seen version.", error));
+    if (action === "show") this.showWhatsNew();
+  }
   openCustomizationSettings() {
     this.settingsModal.open();
   }
@@ -4043,6 +4226,8 @@ module.exports = class CustomizationStudioPlugin extends Plugin {
       () => this.openCustomizationSettings()
     );
     this.register(() => ribbonIcon.remove());
+    this.register(() => this.whatsNewModal?.close());
+    this.addCommand({ id: "show-whats-new", name: "Show what's new", callback: () => this.showWhatsNew() });
   }
   cleanup() {
     this.unloading = true;

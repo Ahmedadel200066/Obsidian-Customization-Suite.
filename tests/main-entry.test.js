@@ -12,7 +12,7 @@ test("ribbon action opens the settings modal and registered cleanup closes it", 
   class Modal {
     constructor() {
       this.modalEl = { addClass() {} };
-      this.contentEl = { addClass() {}, empty() {} };
+      this.contentEl = { addClass() {}, empty() {}, setAttribute(name, value) { this.attrs = { ...this.attrs, [name]: value }; } };
     }
 
     setTitle() {}
@@ -62,16 +62,21 @@ test("ribbon action opens the settings modal and registered cleanup closes it", 
     ribbonAction = callback;
     return { remove: () => { removed = true; } };
   };
+  const commands = [];
+  plugin.addCommand = (command) => commands.push(command);
   plugin.register = (callback) => cleanups.push(callback);
   plugin.notifyUser = (message) => { throw new Error(message);   };
   plugin.registerCustomizationEntryPoints();
+  assert.equal(commands.length, 1);
+  assert.equal(commands[0].id, "show-whats-new");
+  assert.equal(commands[0].name, "Show what's new");
   ribbonAction();
   assert.equal(modalOpened, 1);
   cleanups.forEach((cleanup) => cleanup());
   assert.equal(modalClosed, 1);
   assert.equal(removed, true);
 
-  const contentEl = { addClass() {}, empty() {} };
+  const contentEl = { addClass() {}, empty() {}, setAttribute(name, value) { this.attrs = { ...this.attrs, [name]: value }; } };
   const renders = [];
   const settingsTab = {
     displayInto(containerEl, viewKey) { renders.push(["render", containerEl, viewKey]); },
@@ -80,6 +85,7 @@ test("ribbon action opens the settings modal and registered cleanup closes it", 
   const modal = new CustomizationStudioModal({}, settingsTab);
   modal.contentEl = contentEl;
   modal.open();
+  assert.equal(contentEl.attrs.tabindex, "0");
   modal.close();
   assert.deepEqual(renders, [
     ["render", contentEl, "ribbonModal"],
@@ -106,4 +112,19 @@ test('a queued UI callback cannot revive styles after unload',()=>{
  const PluginClass=require('../src/main.js'),plugin=new PluginClass();plugin.unloading=true;
  plugin.themeEngine={apply(){throw Error('style revival');}};plugin.moduleManager={refresh(){throw Error('observer revival');}};
  assert.equal(plugin.applyCustomization(),undefined);
+});
+
+
+test("ribbon modal scroll bounds are runtime-owned and override an old stylesheet", () => {
+  const { applyModalScrollLayout } = require("../core/settings-modal");
+  const element = () => ({ rules: {}, style: { setProperty(name, value, priority) { this.rules[name] = [value, priority]; }, rules: {} } });
+  for (const height of [400, 500, 720, 1000]) {
+    const modal = element(), content = element();
+    applyModalScrollLayout(modal, content, height);
+    assert.deepEqual(content.style.rules["overflow-y"], ["auto", "important"]);
+    assert.deepEqual(content.style.rules["min-height"], ["0", "important"]);
+    assert.deepEqual(modal.style.rules.overflow, ["hidden", "important"]);
+    assert.ok(parseInt(content.style.rules["max-height"][0]) < height);
+    assert.ok(parseInt(modal.style.rules["max-height"][0]) <= height);
+  }
 });

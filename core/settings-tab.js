@@ -74,6 +74,9 @@ class CustomizationSettingTab extends PluginSettingTab {
         ? "Visual profiles for Obsidian and supported plugins. Settings preview immediately and save automatically."
         : "Customization is paused. You can edit profiles; effects return when enabled."
     });
+    new Setting(header).setName("What's new")
+      .setDesc("See the release notes for this version.")
+      .addButton((button) => button.setButtonText("Show what's new").onClick(() => this.plugin.showWhatsNew()));
     const activeProfile = this.plugin.profileManager.getActiveProfile();
     const profileHeader = header.createEl("div", {
       cls: "cs-active-profile-header",

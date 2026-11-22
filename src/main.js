@@ -6,6 +6,8 @@ const { ModuleManager } = require("../core/module-manager");
 const { PresentationManager } = require("../core/presentation-manager");
 const { CustomizationSettingTab } = require("../core/settings-tab");
 const { CustomizationStudioModal } = require("../core/settings-modal");
+const { WhatsNewModal } = require("../core/whats-new-modal");
+const { whatsNewAction } = require("../core/whats-new");
 
 module.exports = class CustomizationStudioPlugin extends Plugin {
   notifyUser(message) {
@@ -36,7 +38,7 @@ module.exports = class CustomizationStudioPlugin extends Plugin {
       this.registerCustomizationEntryPoints();
       this.watchAppearance();
       this.applyCustomization();
-      this.app.workspace.onLayoutReady(() => this.moduleManager.refreshWithNotice());
+      this.app.workspace.onLayoutReady(() => { this.moduleManager.refreshWithNotice(); this.checkWhatsNew(); });
     } catch (error) {
       console.error("Customization Studio failed to start.", error);
       new Notice(`Customization Studio failed to start: ${error.message}`);
@@ -109,6 +111,31 @@ module.exports = class CustomizationStudioPlugin extends Plugin {
     return this.settingsManager.scheduleSave();
   }
 
+  showWhatsNew() {
+    const version = this.manifest?.version;
+    if (!version) return;
+    const settings = this.settingsManager.settings;
+    this.whatsNewModal?.close();
+    this.whatsNewModal = new WhatsNewModal(this.app, {
+      version,
+      showOnUpdate: settings.showWhatsNew !== false,
+      onToggle: (enabled) => { settings.showWhatsNew = enabled; this.settingsManager.scheduleSave().catch((error) => console.error("Customization Studio could not save the what's new preference.", error)); }
+    });
+    this.whatsNewModal.open();
+  }
+
+  checkWhatsNew() {
+    if (this.unloading) return;
+    const settings = this.settingsManager.settings, version = this.manifest?.version;
+    if (!version) return;
+    const action = whatsNewAction({ freshInstall: this.settingsManager.freshInstall, lastSeenVersion: settings.lastSeenVersion, currentVersion: version, enabled: settings.showWhatsNew !== false });
+    if (action === "none") return;
+    settings.lastSeenVersion = version;
+    this.settingsManager.freshInstall = false;
+    this.settingsManager.scheduleSave().catch((error) => console.error("Customization Studio could not remember the last seen version.", error));
+    if (action === "show") this.showWhatsNew();
+  }
+
   openCustomizationSettings() {
     this.settingsModal.open();
   }
@@ -121,6 +148,8 @@ module.exports = class CustomizationStudioPlugin extends Plugin {
       () => this.openCustomizationSettings()
     );
     this.register(() => ribbonIcon.remove());
+    this.register(() => this.whatsNewModal?.close());
+    this.addCommand({ id: "show-whats-new", name: "Show what's new", callback: () => this.showWhatsNew() });
   }
 
   cleanup() {

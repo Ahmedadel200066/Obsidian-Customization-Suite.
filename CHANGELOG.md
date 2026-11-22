@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.3.0
+
+### Added
+
+- Version-aware What's new dialog, shown once after an update and skipped on a fresh install.
+- Show what's new command and settings button, plus a centered Buy Me a Coffee support button with an inline icon.
+
+### Fixed
+
+- Ribbon settings scrolling when an older installed stylesheet or conflicting theme rules hid overflow.
+- Ribbon modal scroll bounds now use viewport-based runtime sizing and update on window or visual viewport resize.
+
+
 ## 1.2.0
 
 ### Added

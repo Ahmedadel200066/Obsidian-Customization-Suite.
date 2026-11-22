@@ -48,7 +48,8 @@ Screenshots are not available yet.
 - Organized visual settings with color pickers, sliders, toggles, dropdowns,
   collapsible groups, active-profile color previews, live preview, and automatic
   persistence.
-- A ribbon shortcut opens the visual settings in a plugin-owned modal.
+- A ribbon shortcut opens the visual settings in a plugin-owned modal with viewport-bounded scrolling.
+- A version-aware What's new dialog explains updates once, stays silent on fresh installs, and can be reopened from settings or the command palette.
 - Independent module enablement and settings for each supported integration.
 - Optional module-scoped custom CSS.
 - Styles and observers are owned by the plugin and cleaned up when modules are

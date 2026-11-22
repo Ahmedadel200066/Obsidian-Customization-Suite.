@@ -3,6 +3,8 @@ const DEFAULT_SETTINGS = {
   activeProfileId: "minimal",
   customProfiles: [],
   moduleEnabled: {},
+  lastSeenVersion: null,
+  showWhatsNew: true,
   uiState: {
     settingsTab: { section: "profiles", moduleId: "kanban", scrollTop: 0 },
     ribbonModal: { section: "profiles", moduleId: "kanban", scrollTop: 0 }
@@ -54,6 +56,7 @@ class SettingsManager {
 
   async load() {
     const data = await this.plugin.loadData();
+    this.freshInstall = data == null;
     if (data == null) {
       this.settings = {
         ...DEFAULT_SETTINGS,
@@ -88,8 +91,18 @@ class SettingsManager {
       }
     }
 
+    const lastSeenVersion = data.lastSeenVersion ?? null;
+    if (lastSeenVersion !== null && (typeof lastSeenVersion !== "string" || !/^\d{1,6}\.\d{1,6}\.\d{1,6}$/.test(lastSeenVersion))) {
+      throw new Error("Customization Studio lastSeenVersion must be a version like 1.2.0.");
+    }
+    const showWhatsNew = data.showWhatsNew ?? true;
+    if (typeof showWhatsNew !== "boolean") {
+      throw new Error("Customization Studio showWhatsNew must be a boolean.");
+    }
     this.settings = {
       ...DEFAULT_SETTINGS,
+      lastSeenVersion,
+      showWhatsNew,
       customizationEnabled,
       activeProfileId,
       customProfiles,

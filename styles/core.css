@@ -14,11 +14,24 @@
 .modal.customization-studio-modal {
   width: min(92vw, 1100px);
   max-width: calc(100vw - 2rem);
+  max-height: 92vh !important;
+  max-height: 92dvh !important;
+  min-height: 0 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  overflow: hidden !important;
 }
 
 .modal.customization-studio-modal .modal-content {
-  max-height: 82vh;
-  overflow: hidden;
+  display: block !important;
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  max-height: calc(92vh - 110px) !important;
+  overflow-x: hidden !important;
+  overflow-y: auto !important;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
 }
 
 .customization-studio-settings .cs-settings-header {
@@ -254,4 +267,61 @@
 .customization-studio-settings .cs-primary-tabs button:focus-visible,
 .customization-studio-settings .cs-integration-tabs button:focus-visible {
   outline-offset: -3px;
+}
+
+.customization-studio-whatsnew .cs-whatsnew-summary {
+  color: var(--text-muted);
+  margin-top: 0;
+}
+
+.customization-studio-whatsnew .cs-whatsnew-list {
+  margin: 0.5rem 0 1rem;
+  padding-inline-start: 1.25rem;
+}
+
+.customization-studio-whatsnew .cs-whatsnew-list li {
+  margin-bottom: 0.35rem;
+}
+
+.customization-studio-whatsnew .cs-whatsnew-support {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  font-size: var(--font-ui-small);
+  color: var(--text-muted);
+}
+
+.customization-studio-whatsnew .cs-bmc-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.55rem 1.1rem;
+  border-radius: 8px;
+  background: #ffdd00;
+  color: #0d0c22;
+  font-weight: 600;
+  font-size: var(--font-ui-medium);
+  text-decoration: none;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+}
+
+.customization-studio-whatsnew .cs-bmc-button:hover,
+.customization-studio-whatsnew .cs-bmc-button:focus-visible {
+  background: #ffe84d;
+  color: #0d0c22;
+  text-decoration: none;
+}
+
+.customization-studio-whatsnew .cs-whatsnew-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.customization-studio-whatsnew .cs-whatsnew-optout {
+  font-size: var(--font-ui-small);
+  color: var(--text-muted);
 }
