@@ -45,7 +45,7 @@ var require_settings_manager = __commonJS({
         ribbonModal: { section: "profiles", moduleId: "kanban", scrollTop: 0 }
       }
     };
-    var UI_SECTIONS = /* @__PURE__ */ new Set(["global", "profiles", "integrations"]);
+    var UI_SECTIONS = /* @__PURE__ */ new Set(["global", "profiles", "integrations", "advanced"]);
     function validateUiState(value) {
       if (value === void 0) return JSON.parse(JSON.stringify(DEFAULT_SETTINGS.uiState));
       if (!value || typeof value !== "object" || Array.isArray(value)) {
@@ -492,6 +492,19 @@ var require_selective_styles = __commonJS({
         for (const [id, entry] of actual) if (!other.has(id) || other.get(id).value !== entry.value) keep.add(id);
         if (key === "columnColors" || key === "automaticColumnColors") {
           for (const [id, entry] of actual) if (entry.selector.includes("data-cs-kanban-column")) keep.add(id);
+        }
+      }
+      const changedVariables = new Set([...keep].map((id) => actual.get(id).property).filter((name) => name.startsWith("--")));
+      let consumersAdded = true;
+      while (consumersAdded) {
+        consumersAdded = false;
+        for (const [id, entry] of actual) {
+          const usesChanged = [...entry.value.matchAll(/var\((--[a-z0-9-]+)/gi)].some((match) => changedVariables.has(match[1]));
+          if (usesChanged && !keep.has(id)) {
+            keep.add(id);
+            consumersAdded = true;
+            if (entry.property.startsWith("--")) changedVariables.add(entry.property);
+          }
         }
       }
       let expanded = true;
@@ -2961,8 +2974,35 @@ var require_presentation_manager = __commonJS({
       async load() {
         const adapter = this.plugin.app.vault.adapter;
         this.persistedData = copy(await this.plugin.loadData() ?? null);
+        let raw, mainError, pendingRecovery = false;
         if (await adapter.exists(this.path)) {
-          const raw = JSON.parse(await adapter.read(this.path));
+          try {
+            raw = JSON.parse(await adapter.read(this.path));
+          } catch (error) {
+            mainError = error;
+          }
+        }
+        if (await adapter.exists(this.path + ".tmp")) {
+          try {
+            const pending = JSON.parse(await adapter.read(this.path + ".tmp"));
+            this.validateState(pending);
+            const current = JSON.stringify(this.persistedData);
+            if (pending.transaction && [pending.transaction.before, pending.transaction.after].some((value) => JSON.stringify(value) === current)) {
+              const { SettingsManager: SettingsManager2 } = require_settings_manager();
+              const checkSettings = new SettingsManager2({ loadData: async () => pending.transaction.after });
+              await checkSettings.load();
+              const { ProfileManager: ProfileManager2 } = require_profile_manager();
+              new ProfileManager2(checkSettings).load();
+              raw = pending;
+              pendingRecovery = true;
+            }
+          } catch (error) {
+            console.warn("Customization Studio kept an unreadable pending-save journal; using the committed settings if valid.", error);
+          }
+        }
+        if (mainError && !pendingRecovery) throw mainError;
+        if (!raw && await adapter.exists(this.path + ".tmp")) throw new Error("The pending Customization Studio save cannot be recovered safely. Keep the settings files and restore a matching backup pair.");
+        if (raw) {
           let recovery;
           if (raw.transaction) {
             const current = JSON.stringify(this.persistedData), after = JSON.stringify(raw.transaction.after), before = JSON.stringify(raw.transaction.before);
@@ -2980,11 +3020,13 @@ var require_presentation_manager = __commonJS({
             }
           }
           this.state = this.validateState(raw);
+          if (pendingRecovery) await this.writeSidecar(adapter, JSON.stringify(raw, null, 2));
           if (recovery) {
             await this.plugin.saveData(recovery);
             this.persistedData = copy(recovery);
             this.plugin.notifyUser?.("Recovered the latest Customization Studio settings after an interrupted save.");
           }
+          if (pendingRecovery) await this.clearPendingSave(adapter);
         }
         let created = false;
         if (!this.state.defaultProfileId || !this.pm.getProfile(this.state.defaultProfileId)) {
@@ -3088,7 +3130,11 @@ var require_presentation_manager = __commonJS({
       }
       async backupSidecar(adapter, path) {
         try {
-          if (await adapter.exists(path)) await adapter.write(path + ".bak", await adapter.read(path));
+          if (await adapter.exists(path)) {
+            const contents = await adapter.read(path);
+            this.validateState(JSON.parse(contents));
+            await adapter.write(path + ".bak", contents);
+          }
         } catch (error) {
           if (!this.backupWarned) {
             this.backupWarned = true;
@@ -3096,14 +3142,34 @@ var require_presentation_manager = __commonJS({
           }
         }
       }
+      async writeSidecar(adapter, serialized) {
+        if (typeof adapter.process === "function" && await adapter.exists(this.path)) {
+          await adapter.process(this.path, () => serialized);
+        } else {
+          await adapter.write(this.path, serialized);
+        }
+      }
+      async clearPendingSave(adapter) {
+        if (typeof adapter.remove !== "function") return;
+        try {
+          if (await adapter.exists(this.path + ".tmp")) await adapter.remove(this.path + ".tmp");
+        } catch (error) {
+          if (!this.pendingCleanupWarned) {
+            this.pendingCleanupWarned = true;
+            console.warn("Customization Studio saved settings but could not remove its pending-save journal.", error);
+          }
+        }
+      }
       async save(snapshot, state) {
         const adapter = this.plugin.app.vault.adapter, path = this.path, temp = path + ".tmp";
         const next = this.legacyData(snapshot), document = { ...state, transaction: { before: this.persistedData ?? null, after: next } };
-        await adapter.write(temp, JSON.stringify(document, null, 2));
+        const serialized = JSON.stringify(document, null, 2);
+        await adapter.write(temp, serialized);
         await this.backupSidecar(adapter, path);
-        await adapter.rename(temp, path);
+        await this.writeSidecar(adapter, serialized);
         await this.plugin.saveData(next);
         this.persistedData = copy(next);
+        await this.clearPendingSave(adapter);
       }
     };
     module2.exports = { PresentationManager: PresentationManager2, detectMode, palette, copy };
@@ -3162,129 +3228,165 @@ var require_settings_tab = __commonJS({
         context.tabResizeObservers = [];
         containerEl.empty();
         containerEl.addClass("customization-studio-settings");
-        const header = containerEl.createEl("header", { cls: "cs-settings-header" });
-        const customizationEnabled = this.plugin.settingsManager.settings.customizationEnabled !== false;
-        const master = new Setting(header).setName("Customization").setDesc("Pause all Customization Studio effects without losing your profiles.");
-        master.settingEl?.addClass("cs-master-customization");
-        master.controlEl?.createEl("span", {
-          cls: "cs-customization-state",
-          text: customizationEnabled ? "Enabled" : "Paused",
-          attr: { role: "status", "aria-live": "polite" }
+        context.preview = null;
+        context.hasCompactToolbar = true;
+        if (context.section === "profiles") context.section = "advanced";
+        const active = this.plugin.profileManager.getActiveProfile();
+        const header = containerEl.createEl("header", { cls: "cs-toolbar" });
+        const profileControl = new Setting(header).setName("Profile").addDropdown((dropdown) => {
+          for (const profile of this.plugin.profileManager.getProfiles()) dropdown.addOption(profile.id, profile.name);
+          (dropdown.selectEl || dropdown.inputEl)?.setAttribute?.("aria-label", "Active profile");
+          if (context.focusToolbar === "profile") {
+            (dropdown.selectEl || dropdown.inputEl)?.focus?.();
+            delete context.focusToolbar;
+          }
+          dropdown.setValue(active.id).onChange((id) => this.runChange(async () => {
+            context.focusToolbar = "profile";
+            this.plugin.profileManager.setActiveProfile(id);
+            this.plugin.applyCustomization();
+            this.refreshAllViews();
+            await this.persistChange(context, true);
+          }));
         });
-        master.addToggle((toggle) => {
+        profileControl.settingEl?.addClass("cs-toolbar-profile");
+        if (this.plugin.presentation) new Setting(header).setName("Mode").addDropdown((dropdown) => {
+          dropdown.addOption("auto", "Follow Obsidian").addOption("light", "Light").addOption("dark", "Dark");
+          (dropdown.selectEl || dropdown.inputEl)?.setAttribute?.("aria-label", "Appearance mode");
+          if (context.focusToolbar === "mode") {
+            (dropdown.selectEl || dropdown.inputEl)?.focus?.();
+            delete context.focusToolbar;
+          }
+          dropdown.setValue(this.plugin.presentation.meta().mode).onChange((mode) => this.runChange(async () => {
+            context.focusToolbar = "mode";
+            this.plugin.presentation.setMode(mode);
+            this.plugin.applyCustomization();
+            this.refreshAllViews();
+            await this.persistChange(context, true);
+          }));
+        });
+        const enabled = this.plugin.settingsManager.settings.customizationEnabled !== false;
+        const power = new Setting(header).setName("Customization").addToggle((toggle) => {
           const element = toggle.toggleEl || toggle.inputEl;
           element?.setAttribute?.("aria-label", "Customization Studio customization");
-          toggle.setValue(customizationEnabled).onChange((enabled) => this.runChange(async () => {
+          toggle.setValue(enabled).onChange((value) => this.runChange(async () => {
             context.focusMasterToggle = true;
-            await this.plugin.setCustomizationEnabled(enabled);
+            await this.plugin.setCustomizationEnabled(value);
           }));
           if (context.focusMasterToggle) {
             element?.focus?.();
             delete context.focusMasterToggle;
           }
         });
-        header.createEl("p", {
-          text: customizationEnabled ? "Visual profiles for Obsidian and supported plugins. Settings preview immediately and save automatically." : "Customization is paused. You can edit profiles; effects return when enabled."
+        power.settingEl?.addClass("cs-toolbar-power");
+        const manage = header.createEl("button", { text: "Manage profiles", cls: "cs-manage-profiles", attr: { type: "button" } });
+        manage.addEventListener("click", () => {
+          context.scrollTop = 0;
+          this.setViewState(context, { section: "advanced" });
+          this.refreshDisplay(context);
         });
-        new Setting(header).setName("What's new").setDesc("See the release notes for this version.").addButton((button) => button.setButtonText("Show what's new").onClick(() => this.plugin.showWhatsNew()));
-        const activeProfile = this.plugin.profileManager.getActiveProfile();
-        const profileHeader = header.createEl("div", {
-          cls: "cs-active-profile-header",
-          attr: { "aria-label": `Active profile: ${activeProfile.name}`, "aria-live": "polite" }
+        const search = header.createEl("input", { cls: "cs-page-search", attr: { type: "search", placeholder: "Search this page", "aria-label": "Search this page" } });
+        search.value = context.searchQuery || "";
+        search.addEventListener("input", () => {
+          context.searchQuery = search.value;
+          this.filterPage(context);
         });
-        profileHeader.createEl("span", { cls: "cs-active-profile-badge", text: "Active profile" });
-        const profileName = profileHeader.createEl("strong", { text: activeProfile.name });
-        const swatches = profileHeader.createEl("div", {
-          cls: "cs-profile-swatches",
-          attr: { "aria-label": "Active profile color preview" }
-        });
-        for (const [label, value] of [
-          ["Accent", activeProfile.variables.accentColor],
-          ["Surface", activeProfile.variables.surfaceColor],
-          ["Text", activeProfile.variables.textColor],
-          ["Tab gradient", activeProfile.variables.tabBarGradientColor]
-        ]) {
-          const swatch = swatches.createEl("span", { cls: "cs-profile-swatch" });
-          swatch.dataset.profileColor = label;
-          swatch.setAttribute("title", `${label}: ${value}`);
-          swatch.setAttribute("aria-label", `${label}: ${value}`);
-          swatch.style.backgroundColor = value;
-        }
-        const enabledModules = MODULES.filter((module3) => activeProfile.moduleEnabled[module3.id] !== false).map((module3) => module3.name);
-        const moduleSummary = profileHeader.createEl("span", {
-          cls: "cs-profile-modules",
-          text: enabledModules.length ? `${customizationEnabled ? "Enabled" : "Configured"}: ${enabledModules.join(", ")}` : "No modules enabled"
-        });
-        context.preview = { name: profileName, swatches: [...swatches.children], moduleSummary };
-        const navigation = containerEl.createEl("div", {
-          cls: "cs-primary-tabs",
-          attr: { role: "tablist", "aria-label": "Customization Studio settings" }
-        });
-        const panel = containerEl.createEl("section", {
-          cls: "cs-primary-panel",
-          attr: {
-            role: "tabpanel",
-            tabindex: "0",
-            id: `cs-${context.viewKey}-panel`,
-            "aria-labelledby": `cs-${context.viewKey}-tab-${context.section}`
+        search.addEventListener("keydown", (event) => {
+          if (event.key === "Escape") {
+            search.value = "";
+            context.searchQuery = "";
+            this.filterPage(context);
           }
         });
+        const status = containerEl.createEl("p", { cls: "cs-view-status", attr: { role: "status", "aria-live": "polite" }, text: enabled ? "Changes apply immediately and save automatically." : "Paused. Edits are saved; effects return when enabled." });
+        const layout = containerEl.createEl("div", { cls: "cs-settings-layout" });
+        const navigation = layout.createEl("div", { cls: "cs-sidebar", attr: { role: "tablist", "aria-label": "Customization Studio settings", "aria-orientation": "vertical" } });
+        const panel = layout.createEl("section", { cls: "cs-primary-panel", attr: { role: "tabpanel", tabindex: "0", id: `cs-${context.viewKey}-panel`, "aria-labelledby": `cs-${context.viewKey}-tab-${context.section}` } });
         context.panel = panel;
-        const tabs = [
-          ["global", "Global appearance"],
-          ["profiles", "Profiles"],
-          ["integrations", "Integrations"]
-        ];
+        const tabs = [["global", "Appearance"], ["integrations", "Plugins"], ["advanced", "Advanced"]];
+        const pageSelect = containerEl.createEl("select", { cls: "cs-mobile-page", attr: { "aria-label": "Settings page" } });
+        for (const [id, label] of tabs) pageSelect.createEl("option", { text: label, attr: { value: id } });
+        pageSelect.value = context.section;
+        if (layout.before) layout.before(pageSelect);
+        pageSelect.addEventListener("change", () => {
+          context.focusPageSelect = true;
+          context.searchQuery = "";
+          context.scrollTop = 0;
+          this.setViewState(context, { section: pageSelect.value });
+          this.refreshDisplay(context);
+        });
+        if (context.focusPageSelect) {
+          pageSelect.focus();
+          delete context.focusPageSelect;
+        }
         const tabElements = [];
-        for (const [id, label] of tabs) {
-          const tab = navigation.createEl("button", {
-            text: label,
-            attr: {
-              type: "button",
-              role: "tab",
-              "aria-selected": String(context.section === id),
-              tabindex: context.section === id ? "0" : "-1",
-              "aria-controls": `cs-${context.viewKey}-panel`
-            }
-          });
-          tabElements.push(tab);
-          tab.setAttribute("id", `cs-${context.viewKey}-tab-${id}`);
+        for (const [index, [id, label]] of tabs.entries()) {
+          const tab = navigation.createEl("button", { text: label, attr: { type: "button", role: "tab", "aria-selected": String(context.section === id), tabindex: context.section === id ? "0" : "-1", "aria-controls": `cs-${context.viewKey}-panel`, id: `cs-${context.viewKey}-tab-${id}` } });
           if (context.section === id) tab.addClass("is-active");
-          tab.addEventListener("click", () => {
-            context.focusPrimaryTab = tabs.findIndex(([tabId]) => tabId === id);
+          const select = () => {
+            context.focusPrimaryTab = index;
+            context.searchQuery = "";
+            context.scrollTop = 0;
             this.setViewState(context, { section: id });
             this.refreshDisplay(context);
-          });
+          };
+          tab.addEventListener("click", select);
           tab.addEventListener("keydown", (event) => {
-            if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+            if (!["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
             event.preventDefault();
-            const index = tabs.findIndex(([tabId]) => tabId === id);
-            const nextIndex = event.key === "Home" ? 0 : event.key === "End" ? tabs.length - 1 : (index + (event.key === "ArrowRight" ? 1 : -1) + tabs.length) % tabs.length;
-            context.focusPrimaryTab = nextIndex;
-            this.setViewState(context, { section: tabs[nextIndex][0] });
+            const next = event.key === "Home" ? 0 : event.key === "End" ? tabs.length - 1 : (index + (["ArrowRight", "ArrowDown"].includes(event.key) ? 1 : -1) + tabs.length) % tabs.length;
+            context.focusPrimaryTab = next;
+            context.searchQuery = "";
+            context.scrollTop = 0;
+            this.setViewState(context, { section: tabs[next][0] });
             this.refreshDisplay(context);
           });
+          tabElements.push(tab);
         }
-        this.decorateTabs(navigation, tabElements, context, "primary");
         if (context.focusPrimaryTab !== void 0) {
           tabElements[context.focusPrimaryTab]?.focus();
           delete context.focusPrimaryTab;
         }
         if (context.section === "global") {
-          panel.setAttribute("aria-label", "Global appearance");
+          panel.setAttribute("aria-label", "Appearance");
           this.displayGlobalSettings(panel, context);
-        } else if (context.section === "profiles") {
-          panel.setAttribute("aria-label", "Profiles");
-          this.displayProfileSettings(panel, context);
-        } else {
-          panel.setAttribute("aria-label", "Integrations");
+        } else if (context.section === "integrations") {
+          panel.setAttribute("aria-label", "Plugins");
           this.displayModules(panel, context);
+        } else {
+          panel.setAttribute("aria-label", "Advanced");
+          this.displayAdvancedSettings(panel, context);
         }
+        context.searchStatus = panel.createEl("p", { cls: "cs-search-status", attr: { role: "status", "aria-live": "polite" } });
+        this.filterPage(context);
         const footer = containerEl.createEl("footer", { cls: "cs-settings-footer" });
-        footer.createEl("p", {
-          text: "Support via plugin details."
-        });
+        footer.createEl("p", { text: "Support via plugin details." });
         containerEl.scrollTop = context.scrollTop;
+      }
+      filterPage(context) {
+        const panel = context.panel;
+        if (!panel?.querySelectorAll) return;
+        const query = (context.searchQuery || "").trim().toLowerCase();
+        let matches = 0;
+        for (const row of panel.querySelectorAll(".setting-item")) {
+          const visible = !query || row.textContent.toLowerCase().includes(query);
+          row.hidden = !visible;
+          if (visible) matches++;
+        }
+        for (const group of panel.querySelectorAll("details")) {
+          if (query) {
+            if (!group.dataset.csSearchOpen) group.dataset.csSearchOpen = group.open ? "open" : "closed";
+            const visible = [...group.querySelectorAll(".setting-item")].some((row) => !row.hidden);
+            group.hidden = !visible;
+            if (visible) group.open = true;
+          } else {
+            group.hidden = false;
+            if (group.dataset.csSearchOpen) {
+              group.open = group.dataset.csSearchOpen === "open";
+              delete group.dataset.csSearchOpen;
+            }
+          }
+        }
+        if (context.searchStatus) context.searchStatus.textContent = query ? matches ? `${matches} matching settings on this page.` : "No settings match on this page. Try another page or plugin." : "";
       }
       decorateTabs(navigation, tabs, context, key) {
         const active = tabs.find((tab) => tab.getAttribute("aria-selected") === "true");
@@ -3442,27 +3544,29 @@ var require_settings_tab = __commonJS({
         section.createEl("p", {
           text: isCustom ? "Editing your copy. Changes save automatically." : "Built-in preset. Use Manage profile > Duplicate to make an editable copy. Create from Default starts from your own template instead."
         });
-        new Setting(section).setName("Active profile").setDesc(`Currently selected: ${active.name}. ${this.plugin.settingsManager.settings.customizationEnabled === false ? "Changes apply when customization is enabled." : "Switching applies the profile immediately."}`).addDropdown((dropdown) => {
-          for (const profile of this.plugin.profileManager.getProfiles()) {
-            dropdown.addOption(profile.id, profile.name);
-          }
-          dropdown.setValue(active.id).onChange((id) => this.runChange(async () => {
-            this.plugin.profileManager.setActiveProfile(id);
-            this.plugin.applyCustomization();
-            this.refreshAllViews();
-            await this.persistChange(context, true);
-            new Notice2(`Customization Studio: ${this.plugin.settingsManager.settings.customizationEnabled === false ? "selected" : "applied"} "${this.plugin.profileManager.getActiveProfile().name}".`);
-          }));
-        });
-        if (this.plugin.presentation) new Setting(section).setName("Appearance").setDesc("Each profile has Light and Dark variants. Follow Obsidian uses the host/system theme; editing changes the current variant.").addDropdown((dropdown) => {
-          dropdown.addOption("auto", "Follow Obsidian / system").addOption("light", "Light").addOption("dark", "Dark");
-          dropdown.setValue(this.plugin.presentation.meta().mode).onChange((mode) => this.runChange(async () => {
-            this.plugin.presentation.setMode(mode);
-            this.plugin.applyCustomization();
-            this.refreshAllViews();
-            await this.persistChange(context, true);
-          }));
-        });
+        if (!context?.hasCompactToolbar) {
+          new Setting(section).setName("Active profile").setDesc(`Currently selected: ${active.name}. ${this.plugin.settingsManager.settings.customizationEnabled === false ? "Changes apply when customization is enabled." : "Switching applies the profile immediately."}`).addDropdown((dropdown) => {
+            for (const profile of this.plugin.profileManager.getProfiles()) {
+              dropdown.addOption(profile.id, profile.name);
+            }
+            dropdown.setValue(active.id).onChange((id) => this.runChange(async () => {
+              this.plugin.profileManager.setActiveProfile(id);
+              this.plugin.applyCustomization();
+              this.refreshAllViews();
+              await this.persistChange(context, true);
+              new Notice2(`Customization Studio: ${this.plugin.settingsManager.settings.customizationEnabled === false ? "selected" : "applied"} "${this.plugin.profileManager.getActiveProfile().name}".`);
+            }));
+          });
+          if (this.plugin.presentation) new Setting(section).setName("Appearance").setDesc("Each profile has Light and Dark variants. Follow Obsidian uses the host/system theme; editing changes the current variant.").addDropdown((dropdown) => {
+            dropdown.addOption("auto", "Follow Obsidian / system").addOption("light", "Light").addOption("dark", "Dark");
+            dropdown.setValue(this.plugin.presentation.meta().mode).onChange((mode) => this.runChange(async () => {
+              this.plugin.presentation.setMode(mode);
+              this.plugin.applyCustomization();
+              this.refreshAllViews();
+              await this.persistChange(context, true);
+            }));
+          });
+        }
         new Setting(section).setName("Create profile").setDesc("Start from your editable Default template, not an imposed preset. Rename the new profile later.").addButton((button) => button.setButtonText(this.plugin.presentation ? "Create from Default" : "Create copy from current").setCta().onClick(() => this.runChange(async () => {
           this.plugin.profileManager.createFromDefault();
           this.renameValue = "";
@@ -3611,6 +3715,13 @@ var require_settings_tab = __commonJS({
           this.refreshAllViews();
           await this.persistChange(context, true);
         }) : this.updateProfile({ variables: this.plugin.profileManager.builtInProfiles[0].variables, replaceVariables: true }, context, true)));
+      }
+      displayAdvancedSettings(containerEl, context) {
+        this.displayProfileSettings(containerEl, context);
+        const profile = this.plugin.profileManager.getActiveProfile();
+        const section = containerEl.createEl("div", { cls: "cs-section" });
+        new Setting(section).setName("What's new").setDesc("Release notes and optional development support.").addButton((button) => button.setButtonText("Show what's new").onClick(() => this.plugin.showWhatsNew()));
+        if (!this.isCustom(profile)) return;
         const advanced = section.createEl("details", { cls: "cs-subsection" });
         advanced.createEl("summary", { text: "Advanced global CSS" });
         advanced.createEl("p", { text: "Advanced rules can affect any matching Obsidian interface element." });
@@ -3633,6 +3744,20 @@ var require_settings_tab = __commonJS({
           attr: { role: "tablist", "aria-label": "Integrations" }
         });
         const activeModule = MODULES.find((module3) => module3.id === context.moduleId);
+        const sourceSelect = section.createEl("select", { cls: "cs-mobile-module", attr: { "aria-label": "Plugin settings" } });
+        for (const module3 of MODULES) sourceSelect.createEl("option", { text: module3.name, attr: { value: module3.id } });
+        sourceSelect.value = context.moduleId;
+        sourceSelect.addEventListener("change", () => {
+          context.focusModuleSelect = true;
+          context.searchQuery = "";
+          context.scrollTop = 0;
+          this.setViewState(context, { moduleId: sourceSelect.value });
+          this.refreshDisplay(context);
+        });
+        if (context.focusModuleSelect) {
+          sourceSelect.focus();
+          delete context.focusModuleSelect;
+        }
         const modulePanel = section.createEl("section", {
           cls: "cs-integration-panel",
           attr: {
@@ -3660,6 +3785,8 @@ var require_settings_tab = __commonJS({
           if (module3.id === context.moduleId) tab.addClass("is-active");
           tab.addEventListener("click", () => {
             context.focusIntegrationTab = index;
+            context.searchQuery = "";
+            context.scrollTop = 0;
             this.setViewState(context, { moduleId: module3.id });
             this.refreshDisplay(context);
           });
@@ -3668,6 +3795,8 @@ var require_settings_tab = __commonJS({
             event.preventDefault();
             const nextIndex = event.key === "Home" ? 0 : event.key === "End" ? MODULES.length - 1 : (index + (event.key === "ArrowRight" ? 1 : -1) + MODULES.length) % MODULES.length;
             context.focusIntegrationTab = nextIndex;
+            context.searchQuery = "";
+            context.scrollTop = 0;
             this.setViewState(context, { moduleId: MODULES[nextIndex].id });
             this.refreshDisplay(context);
           });

@@ -51,136 +51,104 @@ class CustomizationSettingTab extends PluginSettingTab {
     context.tabResizeObservers = [];
     containerEl.empty();
     containerEl.addClass("customization-studio-settings");
-    const header = containerEl.createEl("header", { cls: "cs-settings-header" });
-    const customizationEnabled = this.plugin.settingsManager.settings.customizationEnabled !== false;
-    const master = new Setting(header).setName("Customization")
-      .setDesc("Pause all Customization Studio effects without losing your profiles.");
-    master.settingEl?.addClass("cs-master-customization");
-    master.controlEl?.createEl("span", {
-      cls: "cs-customization-state", text: customizationEnabled ? "Enabled" : "Paused",
-      attr: { role: "status", "aria-live": "polite" }
+    context.preview = null;
+    context.hasCompactToolbar = true;
+    if (context.section === "profiles") context.section = "advanced";
+    const active = this.plugin.profileManager.getActiveProfile();
+    const header = containerEl.createEl("header", { cls: "cs-toolbar" });
+    const profileControl = new Setting(header).setName("Profile").addDropdown(dropdown => {
+      for (const profile of this.plugin.profileManager.getProfiles()) dropdown.addOption(profile.id, profile.name);
+      (dropdown.selectEl || dropdown.inputEl)?.setAttribute?.("aria-label", "Active profile");
+      if (context.focusToolbar === "profile") { (dropdown.selectEl || dropdown.inputEl)?.focus?.();delete context.focusToolbar; }
+      dropdown.setValue(active.id).onChange(id => this.runChange(async () => {
+        context.focusToolbar = "profile";this.plugin.profileManager.setActiveProfile(id);
+        this.plugin.applyCustomization();this.refreshAllViews();await this.persistChange(context, true);
+      }));
     });
-    master.addToggle((toggle) => {
+    profileControl.settingEl?.addClass("cs-toolbar-profile");
+    if (this.plugin.presentation) new Setting(header).setName("Mode").addDropdown(dropdown => {
+      dropdown.addOption("auto", "Follow Obsidian").addOption("light", "Light").addOption("dark", "Dark");
+      (dropdown.selectEl || dropdown.inputEl)?.setAttribute?.("aria-label", "Appearance mode");
+      if (context.focusToolbar === "mode") { (dropdown.selectEl || dropdown.inputEl)?.focus?.();delete context.focusToolbar; }
+      dropdown.setValue(this.plugin.presentation.meta().mode).onChange(mode => this.runChange(async () => {
+        context.focusToolbar = "mode";this.plugin.presentation.setMode(mode);this.plugin.applyCustomization();this.refreshAllViews();await this.persistChange(context, true);
+      }));
+    });
+    const enabled = this.plugin.settingsManager.settings.customizationEnabled !== false;
+    const power = new Setting(header).setName("Customization").addToggle(toggle => {
       const element = toggle.toggleEl || toggle.inputEl;
       element?.setAttribute?.("aria-label", "Customization Studio customization");
-      toggle.setValue(customizationEnabled).onChange((enabled) => this.runChange(async () => {
-        context.focusMasterToggle = true;
-        await this.plugin.setCustomizationEnabled(enabled);
+      toggle.setValue(enabled).onChange(value => this.runChange(async () => {
+        context.focusMasterToggle = true;await this.plugin.setCustomizationEnabled(value);
       }));
-      if (context.focusMasterToggle) { element?.focus?.(); delete context.focusMasterToggle; }
+      if (context.focusMasterToggle) { element?.focus?.();delete context.focusMasterToggle; }
     });
-    header.createEl("p", {
-      text: customizationEnabled
-        ? "Visual profiles for Obsidian and supported plugins. Settings preview immediately and save automatically."
-        : "Customization is paused. You can edit profiles; effects return when enabled."
-    });
-    new Setting(header).setName("What's new")
-      .setDesc("See the release notes for this version.")
-      .addButton((button) => button.setButtonText("Show what's new").onClick(() => this.plugin.showWhatsNew()));
-    const activeProfile = this.plugin.profileManager.getActiveProfile();
-    const profileHeader = header.createEl("div", {
-      cls: "cs-active-profile-header",
-      attr: { "aria-label": `Active profile: ${activeProfile.name}`, "aria-live": "polite" }
-    });
-    profileHeader.createEl("span", { cls: "cs-active-profile-badge", text: "Active profile" });
-    const profileName = profileHeader.createEl("strong", { text: activeProfile.name });
-    const swatches = profileHeader.createEl("div", {
-      cls: "cs-profile-swatches",
-      attr: { "aria-label": "Active profile color preview" }
-    });
-    for (const [label, value] of [
-      ["Accent", activeProfile.variables.accentColor],
-      ["Surface", activeProfile.variables.surfaceColor],
-      ["Text", activeProfile.variables.textColor],
-      ["Tab gradient", activeProfile.variables.tabBarGradientColor]
-    ]) {
-      const swatch = swatches.createEl("span", { cls: "cs-profile-swatch" });
-      swatch.dataset.profileColor = label;
-      swatch.setAttribute("title", `${label}: ${value}`);
-      swatch.setAttribute("aria-label", `${label}: ${value}`);
-      swatch.style.backgroundColor = value;
-    }
-    const enabledModules = MODULES
-      .filter((module) => activeProfile.moduleEnabled[module.id] !== false)
-      .map((module) => module.name);
-    const moduleSummary = profileHeader.createEl("span", {
-      cls: "cs-profile-modules",
-      text: enabledModules.length ? `${customizationEnabled ? "Enabled" : "Configured"}: ${enabledModules.join(", ")}` : "No modules enabled"
-    });
-    context.preview = { name: profileName, swatches: [...swatches.children], moduleSummary };
-
-    const navigation = containerEl.createEl("div", {
-      cls: "cs-primary-tabs",
-      attr: { role: "tablist", "aria-label": "Customization Studio settings" }
-    });
-    const panel = containerEl.createEl("section", {
-      cls: "cs-primary-panel",
-      attr: {
-        role: "tabpanel",
-        tabindex: "0",
-        id: `cs-${context.viewKey}-panel`,
-        "aria-labelledby": `cs-${context.viewKey}-tab-${context.section}`
-      }
-    });
+    power.settingEl?.addClass("cs-toolbar-power");
+    const manage = header.createEl("button", { text: "Manage profiles", cls: "cs-manage-profiles", attr: { type: "button" } });
+    manage.addEventListener("click", () => { context.scrollTop = 0;this.setViewState(context, { section: "advanced" });this.refreshDisplay(context); });
+    const search = header.createEl("input", { cls: "cs-page-search", attr: { type: "search", placeholder: "Search this page", "aria-label": "Search this page" } });
+    search.value = context.searchQuery || "";
+    search.addEventListener("input", () => { context.searchQuery = search.value;this.filterPage(context); });
+    search.addEventListener("keydown", event => { if (event.key === "Escape") { search.value = "";context.searchQuery = "";this.filterPage(context); } });
+    const status = containerEl.createEl("p", { cls: "cs-view-status", attr: { role: "status", "aria-live": "polite" }, text: enabled ? "Changes apply immediately and save automatically." : "Paused. Edits are saved; effects return when enabled." });
+    const layout = containerEl.createEl("div", { cls: "cs-settings-layout" });
+    const navigation = layout.createEl("div", { cls: "cs-sidebar", attr: { role: "tablist", "aria-label": "Customization Studio settings", "aria-orientation": "vertical" } });
+    const panel = layout.createEl("section", { cls: "cs-primary-panel", attr: { role: "tabpanel", tabindex: "0", id: `cs-${context.viewKey}-panel`, "aria-labelledby": `cs-${context.viewKey}-tab-${context.section}` } });
     context.panel = panel;
-    const tabs = [
-      ["global", "Global appearance"],
-      ["profiles", "Profiles"],
-      ["integrations", "Integrations"]
-    ];
+    const tabs = [["global", "Appearance"], ["integrations", "Plugins"], ["advanced", "Advanced"]];
+    const pageSelect = containerEl.createEl("select", { cls: "cs-mobile-page", attr: { "aria-label": "Settings page" } });
+    for (const [id, label] of tabs) pageSelect.createEl("option", { text: label, attr: { value: id } });
+    pageSelect.value = context.section;
+    // The select remains outside the tablist and is used only by the narrow layout.
+    if (layout.before) layout.before(pageSelect);
+    pageSelect.addEventListener("change", () => { context.focusPageSelect = true;context.searchQuery = "";context.scrollTop = 0;this.setViewState(context, { section: pageSelect.value });this.refreshDisplay(context); });
+    if (context.focusPageSelect) { pageSelect.focus();delete context.focusPageSelect; }
+
     const tabElements = [];
-    for (const [id, label] of tabs) {
-      const tab = navigation.createEl("button", {
-        text: label,
-        attr: {
-          type: "button",
-          role: "tab",
-          "aria-selected": String(context.section === id),
-          tabindex: context.section === id ? "0" : "-1",
-          "aria-controls": `cs-${context.viewKey}-panel`
-        }
+    for (const [index, [id, label]] of tabs.entries()) {
+      const tab = navigation.createEl("button", { text: label, attr: { type: "button", role: "tab", "aria-selected": String(context.section === id), tabindex: context.section === id ? "0" : "-1", "aria-controls": `cs-${context.viewKey}-panel`, id: `cs-${context.viewKey}-tab-${id}` } });
+      if (context.section === id) tab.addClass("is-active");
+      const select = () => { context.focusPrimaryTab = index;context.searchQuery = "";context.scrollTop = 0;this.setViewState(context, { section: id });this.refreshDisplay(context); };
+      tab.addEventListener("click", select);
+      tab.addEventListener("keydown", event => {
+        if (!["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+        event.preventDefault();
+        const next = event.key === "Home" ? 0 : event.key === "End" ? tabs.length - 1 : (index + (["ArrowRight", "ArrowDown"].includes(event.key) ? 1 : -1) + tabs.length) % tabs.length;
+        context.focusPrimaryTab = next;context.searchQuery = "";context.scrollTop = 0;this.setViewState(context, { section: tabs[next][0] });this.refreshDisplay(context);
       });
       tabElements.push(tab);
-      tab.setAttribute("id", `cs-${context.viewKey}-tab-${id}`);
-      if (context.section === id) tab.addClass("is-active");
-      tab.addEventListener("click", () => {
-        context.focusPrimaryTab = tabs.findIndex(([tabId]) => tabId === id);
-        this.setViewState(context, { section: id });
-        this.refreshDisplay(context);
-      });
-      tab.addEventListener("keydown", (event) => {
-        if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
-        event.preventDefault();
-        const index = tabs.findIndex(([tabId]) => tabId === id);
-        const nextIndex = event.key === "Home" ? 0
-          : event.key === "End" ? tabs.length - 1
-            : (index + (event.key === "ArrowRight" ? 1 : -1) + tabs.length) % tabs.length;
-        context.focusPrimaryTab = nextIndex;
-        this.setViewState(context, { section: tabs[nextIndex][0] });
-        this.refreshDisplay(context);
-      });
     }
-    this.decorateTabs(navigation, tabElements, context, "primary");
-    if (context.focusPrimaryTab !== undefined) {
-      tabElements[context.focusPrimaryTab]?.focus();
-      delete context.focusPrimaryTab;
-    }
-
-    if (context.section === "global") {
-      panel.setAttribute("aria-label", "Global appearance");
-      this.displayGlobalSettings(panel, context);
-    } else if (context.section === "profiles") {
-      panel.setAttribute("aria-label", "Profiles");
-      this.displayProfileSettings(panel, context);
-    } else {
-      panel.setAttribute("aria-label", "Integrations");
-      this.displayModules(panel, context);
-    }
+    if (context.focusPrimaryTab !== undefined) { tabElements[context.focusPrimaryTab]?.focus();delete context.focusPrimaryTab; }
+    if (context.section === "global") { panel.setAttribute("aria-label", "Appearance");this.displayGlobalSettings(panel, context); }
+    else if (context.section === "integrations") { panel.setAttribute("aria-label", "Plugins");this.displayModules(panel, context); }
+    else { panel.setAttribute("aria-label", "Advanced");this.displayAdvancedSettings(panel, context); }
+    context.searchStatus = panel.createEl("p", { cls: "cs-search-status", attr: { role: "status", "aria-live": "polite" } });
+    this.filterPage(context);
     const footer = containerEl.createEl("footer", { cls: "cs-settings-footer" });
-    footer.createEl("p", {
-      text: "Support via plugin details."
-    });
+    footer.createEl("p", { text: "Support via plugin details." });
     containerEl.scrollTop = context.scrollTop;
+  }
+
+  filterPage(context) {
+    const panel = context.panel;
+    if (!panel?.querySelectorAll) return;
+    const query = (context.searchQuery || "").trim().toLowerCase();
+    let matches = 0;
+    for (const row of panel.querySelectorAll(".setting-item")) {
+      const visible = !query || row.textContent.toLowerCase().includes(query);
+      row.hidden = !visible;if (visible) matches++;
+    }
+    for (const group of panel.querySelectorAll("details")) {
+      if (query) {
+        if (!group.dataset.csSearchOpen) group.dataset.csSearchOpen = group.open ? "open" : "closed";
+        const visible = [...group.querySelectorAll(".setting-item")].some(row => !row.hidden);
+        group.hidden = !visible;if (visible) group.open = true;
+      } else {
+        group.hidden = false;
+        if (group.dataset.csSearchOpen) { group.open = group.dataset.csSearchOpen === "open";delete group.dataset.csSearchOpen; }
+      }
+    }
+    if (context.searchStatus) context.searchStatus.textContent = query ? (matches ? `${matches} matching settings on this page.` : "No settings match on this page. Try another page or plugin.") : "";
   }
 
   decorateTabs(navigation, tabs, context, key) {
@@ -345,6 +313,7 @@ class CustomizationSettingTab extends PluginSettingTab {
       text: isCustom ? "Editing your copy. Changes save automatically." : "Built-in preset. Use Manage profile > Duplicate to make an editable copy. Create from Default starts from your own template instead."
     });
 
+    if (!context?.hasCompactToolbar) {
     new Setting(section)
       .setName("Active profile")
       .setDesc(`Currently selected: ${active.name}. ${this.plugin.settingsManager.settings.customizationEnabled === false ? "Changes apply when customization is enabled." : "Switching applies the profile immediately."}`)
@@ -368,6 +337,8 @@ class CustomizationSettingTab extends PluginSettingTab {
           this.plugin.presentation.setMode(mode);this.plugin.applyCustomization();this.refreshAllViews();await this.persistChange(context,true);
         }));
       });
+
+    }
 
     new Setting(section)
       .setName("Create profile")
@@ -563,6 +534,14 @@ class CustomizationSettingTab extends PluginSettingTab {
           this.plugin.presentation.resetGlobal();this.plugin.applyCustomization();this.refreshAllViews();await this.persistChange(context,true);
         }):this.updateProfile({variables:this.plugin.profileManager.builtInProfiles[0].variables,replaceVariables:true},context,true)));
 
+  }
+
+  displayAdvancedSettings(containerEl, context) {
+    this.displayProfileSettings(containerEl, context);
+    const profile = this.plugin.profileManager.getActiveProfile();
+    const section = containerEl.createEl("div", { cls: "cs-section" });
+    new Setting(section).setName("What's new").setDesc("Release notes and optional development support.").addButton(button => button.setButtonText("Show what's new").onClick(() => this.plugin.showWhatsNew()));
+    if (!this.isCustom(profile)) return;
     const advanced = section.createEl("details", { cls: "cs-subsection" });
     advanced.createEl("summary", { text: "Advanced global CSS" });
     advanced.createEl("p", { text: "Advanced rules can affect any matching Obsidian interface element." });
@@ -589,6 +568,12 @@ class CustomizationSettingTab extends PluginSettingTab {
       attr: { role: "tablist", "aria-label": "Integrations" }
     });
     const activeModule = MODULES.find((module) => module.id === context.moduleId);
+    const sourceSelect = section.createEl("select", { cls: "cs-mobile-module", attr: { "aria-label": "Plugin settings" } });
+    for (const module of MODULES) sourceSelect.createEl("option", { text: module.name, attr: { value: module.id } });
+    sourceSelect.value = context.moduleId;
+    sourceSelect.addEventListener("change", () => { context.focusModuleSelect = true;context.searchQuery = "";context.scrollTop = 0;this.setViewState(context, { moduleId: sourceSelect.value });this.refreshDisplay(context); });
+    if (context.focusModuleSelect) { sourceSelect.focus();delete context.focusModuleSelect; }
+
     const modulePanel = section.createEl("section", {
       cls: "cs-integration-panel",
       attr: {
@@ -616,7 +601,7 @@ class CustomizationSettingTab extends PluginSettingTab {
       if (module.id === context.moduleId) tab.addClass("is-active");
       tab.addEventListener("click", () => {
         context.focusIntegrationTab = index;
-        this.setViewState(context, { moduleId: module.id });
+        context.searchQuery = "";context.scrollTop = 0;this.setViewState(context, { moduleId: module.id });
         this.refreshDisplay(context);
       });
       tab.addEventListener("keydown", (event) => {
@@ -626,7 +611,7 @@ class CustomizationSettingTab extends PluginSettingTab {
           : event.key === "End" ? MODULES.length - 1
             : (index + (event.key === "ArrowRight" ? 1 : -1) + MODULES.length) % MODULES.length;
         context.focusIntegrationTab = nextIndex;
-        this.setViewState(context, { moduleId: MODULES[nextIndex].id });
+        context.searchQuery = "";context.scrollTop = 0;this.setViewState(context, { moduleId: MODULES[nextIndex].id });
         this.refreshDisplay(context);
       });
     }

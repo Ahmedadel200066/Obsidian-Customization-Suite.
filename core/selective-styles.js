@@ -34,6 +34,15 @@ function selectiveStyles(module, settings, controller, keys) {
     for(const [id,entry]of actual)if(!other.has(id)||other.get(id).value!==entry.value)keep.add(id);
     if(key==="columnColors"||key==="automaticColumnColors")for(const [id,entry]of actual)if(entry.selector.includes("data-cs-kanban-column"))keep.add(id);
   }
+  // A changed variable is not useful unless the declarations consuming it survive.
+  // Start only with changed variables, not every dependency pulled in below, so
+  // unrelated controls sharing a constant token stay inherited.
+  const changedVariables=new Set([...keep].map(id=>actual.get(id).property).filter(name=>name.startsWith("--")));
+  let consumersAdded=true;
+  while(consumersAdded){consumersAdded=false;for(const [id,entry]of actual){
+    const usesChanged=[...entry.value.matchAll(/var\((--[a-z0-9-]+)/gi)].some(match=>changedVariables.has(match[1]));
+    if(usesChanged&&!keep.has(id)){keep.add(id);consumersAdded=true;if(entry.property.startsWith("--"))changedVariables.add(entry.property);}
+  }}
   // Include custom-property definitions needed by selected declarations.
   let expanded=true;while(expanded){expanded=false;for(const id of [...keep]){const entry=actual.get(id);for(const match of entry.value.matchAll(/var\((--[a-z0-9-]+)/gi))for(const [dependency,item]of actual)if(item.property===match[1]&&!keep.has(dependency)){keep.add(dependency);expanded=true;}}}
   return [...actual].filter(([id])=>keep.has(id)).map(([,e])=>e.context.reduceRight((text,at)=>`${at}{${text}}`,`${e.selector}{${e.property}:${e.value};}`)).join("\n");

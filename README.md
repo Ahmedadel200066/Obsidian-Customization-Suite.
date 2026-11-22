@@ -21,6 +21,10 @@ Screenshots are not available yet.
 
 <!-- Add verified screenshots here after capturing them in Obsidian. -->
 
+## Development status
+
+The `main` branch contains fixes and the first settings-layout update after 1.3.0. These changes are not a new release and do not replace the published 1.3.0 downloads. Use the release page for the published build.
+
 ## Features
 
 - Five built-in appearance presets: Minimal, Dark Academia, Glassmorphism,
@@ -39,8 +43,10 @@ Screenshots are not available yet.
 - Global accent, surface, and text colors; profile-level custom CSS.
 - Tab-header-only background transparency, backdrop blur, and configurable
   linear, elliptical radial, or circular radial gradients.
-- Accessible tabbed navigation for Global Appearance, Profiles, and
-  Integrations, with a separate integration tab for each supported module.
+- A compact sticky toolbar for profiles, appearance mode, customization pause, and current-page search.
+- Appearance, Plugins, and Advanced navigation with keyboard-operable tabs. Narrow settings surfaces use page and plugin dropdowns instead.
+- Profile management and global custom CSS under Advanced; Manage profiles opens it directly.
+- Current-page search filters settings, temporarily opens matching groups, and restores their previous state when cleared. Search is not yet cross-plugin.
 - Navigation section, selected integration, and scroll position persist
   independently for the Community Plugins settings tab and ribbon modal.
 - The active profile name and status are visible across sections and settings

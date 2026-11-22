@@ -159,7 +159,7 @@ test("settings UI renders visual controls and previews/persists module edits", a
   tab.display();
 
   assert.equal(findElements(tab.containerEl, (element) => ["h1", "h2", "h3", "h4"].includes(element.tagName)).length, 0);
-  assert.ok(findElements(tab.containerEl, (element) => element.tagName === "button" && element.textContent === "Global appearance").length);
+  assert.ok(findElements(tab.containerEl, (element) => element.tagName === "button" && element.textContent === "Appearance").length);
   const footers = findElements(tab.containerEl, (element) => element.tagName === "footer");
   assert.equal(footers.length, 1);
   assert.match(footers[0].children[0].textContent, /Support via plugin details/);
@@ -210,7 +210,7 @@ test("settings UI renders visual controls and previews/persists module edits", a
   tab.refreshDisplay(context);
   const accentColor = FakeSetting.actions.find((action) => action.name === "Accent color");
   await accentColor.run("#abcdef");
-  assert.equal(context.preview.swatches[0].style.backgroundColor, "#abcdef");
+  assert.equal(profiles.getActiveProfile().variables.accentColor, "#abcdef");
 
   profiles.updateActiveProfile({
     variables: { accentColor: "#123456", tabBarOpacity: 42, tabBarGradientIntensity: 30 }
@@ -223,7 +223,7 @@ test("settings UI renders visual controls and previews/persists module edits", a
     profiles.getActiveProfile().variables,
     profiles.builtInProfiles[0].variables
   );
-  assert.equal(context.preview.swatches[0].style.backgroundColor, "#7c6ce7");
+  assert.equal(profiles.getActiveProfile().variables.accentColor, "#7c6ce7");
   const resetAccent = FakeSetting.actions
     .filter((action) => action.name === "Accent color")
     .at(-1);
@@ -246,7 +246,7 @@ test("settings UI renders visual controls and previews/persists module edits", a
   tab.displayInto(modalRoot, "ribbonModal");
   let modalContext = tab.viewContexts.get(modalRoot);
   assert.notEqual(modalContext, context);
-  assert.equal(modalContext.section, "profiles");
+  assert.equal(modalContext.section, "advanced");
   assert.equal(modalContext.moduleId, "kanban");
   tab.setViewState(modalContext, {
     section: "integrations",
@@ -262,7 +262,7 @@ test("settings UI renders visual controls and previews/persists module edits", a
   assert.equal(modalRoot.scrollTop, 73);
 
   const integrationsTab = findElements(tab.containerEl, (el) =>
-    el.attributes.get("role") === "tab" && el.textContent === "Integrations")[0];
+    el.attributes.get("role") === "tab" && el.textContent === "Plugins")[0];
   integrationsTab.dispatch("click");
   const basesTab = findElements(tab.containerEl, (el) =>
     el.attributes.get("role") === "tab" && el.textContent === "Obsidian Bases")[0];
@@ -288,25 +288,23 @@ test("settings UI renders visual controls and previews/persists module edits", a
   tab.setViewState(context, { section: "profiles" });
   tab.refreshDisplay(context);
   const activeProfileAction = FakeSetting.actions
-    .filter((action) => action.name === "Active profile")
+    .filter((action) => action.name === "Profile")
     .at(-1);
   await activeProfileAction.run("minimal");
   assert.equal(profiles.getActiveProfile().id, "minimal");
-  assert.equal(context.preview.name.textContent, "Minimal");
-  assert.equal(modalContext.preview.name.textContent, "Minimal");
+  assert.ok(FakeSetting.actions.filter(action => action.name === "Profile").slice(-2).every(action => action.component.value === "minimal"));
 
   const copy = FakeSetting.actions.filter(action => action.name === "Create profile").at(-1);
   await copy.run();
   assert.equal(profiles.getActiveProfile().name, "Minimal copy");
-  assert.equal(context.preview.name.textContent, "Minimal copy");
-  assert.equal(modalContext.preview.name.textContent, "Minimal copy");
+  assert.ok(FakeSetting.actions.filter(action => action.name === "Profile").slice(-2).every(action => action.component.value === profiles.getActiveProfile().id));
   plugin.setCustomizationEnabled = async enabled => {
     settings.settings.customizationEnabled=enabled;plugin.applyCustomization();tab.refreshAllViews();
     await plugin.settingsManager.scheduleSave();
   };
   await FakeSetting.actions.filter(action => action.name === "Customization").at(-1).run(false);
   assert.equal(settings.settings.customizationEnabled,false);
-  assert.match(context.preview.moduleSummary.textContent,/^Configured:/);
+  assert.ok(findElements(tab.containerEl, el => el.tagName === "p" && el.textContent.startsWith("Paused.")).length);
   assert.equal(FakeSetting.actions.filter(action => action.name === "Customization").at(-1).component.value,false);
 
   tab.releaseDisplayTarget(tab.containerEl);
@@ -357,4 +355,19 @@ test('live text changes coalesce and can be flushed before unload',async()=>{
  tab.queueLiveInput(element,async()=>values.push('old'));tab.queueLiveInput(element,async()=>values.push('latest'));
  assert.equal(tab.pendingInputs.size,1);await tab.flushLiveInputs();assert.deepEqual(values,['latest']);assert.equal(tab.pendingInputs.size,0);
  await new Promise(resolve=>setTimeout(resolve,200));assert.deepEqual(values,['latest']);tab.dispose();
+});
+
+
+test("page search opens matching details temporarily and restores collapsed state", () => {
+  const { CustomizationSettingTab } = require("../core/settings-tab");
+  const rows = [{textContent:"Card color",hidden:false},{textContent:"Column spacing",hidden:false}];
+  const group={dataset:{},open:false,hidden:false,querySelectorAll:()=>[rows[0]]};
+  const context={searchQuery:"card",searchStatus:{textContent:""},panel:{querySelectorAll:selector=>selector===".setting-item"?rows:[group]}};
+  CustomizationSettingTab.prototype.filterPage(context);
+  assert.equal(rows[0].hidden,false);assert.equal(rows[1].hidden,true);assert.equal(group.open,true);
+  assert.match(context.searchStatus.textContent,/1 matching/);
+  context.searchQuery="unmatched";CustomizationSettingTab.prototype.filterPage(context);
+  assert.equal(group.hidden,true);assert.match(context.searchStatus.textContent,/No settings match/);
+  context.searchQuery="";CustomizationSettingTab.prototype.filterPage(context);
+  assert.equal(group.open,false);assert.equal(group.hidden,false);assert.ok(rows.every(row=>!row.hidden));
 });

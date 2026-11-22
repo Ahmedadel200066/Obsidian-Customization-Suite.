@@ -10,7 +10,7 @@ const DEFAULT_SETTINGS = {
     ribbonModal: { section: "profiles", moduleId: "kanban", scrollTop: 0 }
   }
 };
-const UI_SECTIONS = new Set(["global", "profiles", "integrations"]);
+const UI_SECTIONS = new Set(["global", "profiles", "integrations", "advanced"]);
 
 function validateUiState(value) {
   if (value === undefined) return JSON.parse(JSON.stringify(DEFAULT_SETTINGS.uiState));

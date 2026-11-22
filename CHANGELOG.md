@@ -38,6 +38,20 @@
 
 ## Unreleased
 
+### Post-1.3.0 changes on main
+
+- Keep CSS-variable consumers when a neutral profile overrides Kanban card color or opacity.
+- Remove duplicate modal max-height declarations and stylesheet important rules while retaining runtime scroll protection.
+- Add the phase-one compact sticky toolbar and Appearance / Plugins / Advanced layout, with responsive page/plugin dropdowns and current-page search.
+- Preserve profile tools under Advanced and retain keyboard navigation.
+- Replace rename-to-existing sidecar saves with atomic processing when available and overwrite-capable writes otherwise.
+- Recover valid pending-save journals from interrupted saves or the older destination-exists error, while preserving existing settings and backups.
+- Add regression coverage for save collisions, journal recovery, inherited variable consumers, and search state.
+
+These changes do not alter the published 1.3.0 release assets. Basics/details grouping and per-control Inherited/Modified resets are not included in this phase.
+
+### Earlier development notes
+
 - Preserve successive Kanban column color edits and Clear actions in one settings view.
 - Discover review dialogs and drag portals outside the main workspace.
 - Apply and clean up module/profile styles independently in popout documents.

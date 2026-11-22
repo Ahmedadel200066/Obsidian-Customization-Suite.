@@ -14,21 +14,20 @@
 .modal.customization-studio-modal {
   width: min(92vw, 1100px);
   max-width: calc(100vw - 2rem);
-  max-height: 92vh !important;
-  max-height: 92dvh !important;
-  min-height: 0 !important;
-  display: flex !important;
-  flex-direction: column !important;
-  overflow: hidden !important;
+  max-height: 92vh;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .modal.customization-studio-modal .modal-content {
-  display: block !important;
-  flex: 1 1 auto !important;
-  min-height: 0 !important;
-  max-height: calc(92vh - 110px) !important;
-  overflow-x: hidden !important;
-  overflow-y: auto !important;
+  display: block;
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: calc(92vh - 110px);
+  overflow-x: hidden;
+  overflow-y: auto;
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
   touch-action: pan-y;
@@ -324,4 +323,79 @@
 .customization-studio-whatsnew .cs-whatsnew-optout {
   font-size: var(--font-ui-small);
   color: var(--text-muted);
+}
+
+/* Compact settings shell. Critical modal scroll bounds remain runtime-owned. */
+.customization-studio-settings { container-type: inline-size; width: 100%; box-sizing: border-box; }
+.customization-studio-settings .cs-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 10px 0;
+  background: var(--background-primary);
+  border-bottom: 1px solid var(--background-modifier-border);
+}
+.customization-studio-settings header.cs-toolbar .setting-item,
+.modal.customization-studio-modal .customization-studio-settings header.cs-toolbar .setting-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 0;
+  margin: 0;
+  min-height: 0;
+  border: 0;
+  background: transparent;
+}
+.customization-studio-settings .cs-toolbar .setting-item-info { margin: 0; display: none; }
+.customization-studio-settings header.cs-toolbar .cs-toolbar-power { flex-direction: row; align-items: center; }
+.customization-studio-settings .cs-toolbar .cs-toolbar-power .setting-item-info { display: block; }
+.customization-studio-settings .cs-toolbar .cs-toolbar-power .setting-item-control { min-width: 22px; }
+.customization-studio-settings .cs-toolbar .cs-toolbar-power input[type="checkbox"] { width: 18px; height: 18px; }
+.customization-studio-settings .cs-toolbar .setting-item-name { font-size: 11px; color: var(--text-muted); }
+.customization-studio-settings .cs-toolbar .setting-item .setting-item-control { padding: 0; justify-content: flex-start; width: auto; max-width: none; flex: 0 0 auto; }
+.customization-studio-settings .cs-toolbar .setting-item-description { display: none; }
+.customization-studio-settings .cs-toolbar select { max-width: 170px; }
+.customization-studio-settings .cs-toolbar .cs-toolbar-profile select { width: 145px; }
+.customization-studio-settings .cs-page-search { min-width: 140px; flex: 1 1 160px; }
+.customization-studio-settings .cs-manage-profiles { font-size: var(--font-ui-smaller); }
+.customization-studio-settings .cs-view-status { margin: 8px 0 14px; color: var(--text-muted); font-size: var(--font-ui-smaller); }
+.customization-studio-settings .cs-settings-layout { display: grid; grid-template-columns: 130px minmax(0, 1fr); gap: 18px; align-items: start; }
+.customization-studio-settings .cs-sidebar { display: flex; flex-direction: column; gap: 5px; position: sticky; top: 110px; }
+.customization-studio-settings .cs-sidebar button { text-align: start; box-shadow: none; border: 0; background: transparent; padding: 9px 12px; height: auto; }
+.customization-studio-settings .cs-sidebar button.is-active { background: var(--background-modifier-hover); color: var(--interactive-accent); font-weight: 600; }
+.customization-studio-settings .cs-primary-panel { min-width: 0; }
+.customization-studio-settings .cs-primary-panel .setting-item[hidden],
+.customization-studio-settings .cs-primary-panel details[hidden] { display: none; }
+.customization-studio-settings .cs-search-status { color: var(--text-muted); font-size: var(--font-ui-smaller); }
+.customization-studio-settings .cs-mobile-page { display: none; }
+@container (max-width: 650px) {
+  .customization-studio-settings .cs-settings-layout { grid-template-columns: minmax(0, 1fr); gap: 10px; }
+  .customization-studio-settings .cs-sidebar { display: none; }
+  .customization-studio-settings .cs-mobile-page { display: block; width: 100%; margin-bottom: 10px; }
+  .customization-studio-settings .cs-toolbar .cs-toolbar-profile select { width: 125px; }
+  .customization-studio-settings .cs-toolbar select { max-width: 145px; }
+  .customization-studio-settings .cs-page-search { flex-basis: 160px; }
+}
+
+.customization-studio-settings .cs-settings-layout .cs-section,
+.customization-studio-settings .cs-settings-layout .cs-module-section,
+.customization-studio-settings .cs-settings-layout .cs-integration-panel {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  background: transparent;
+}
+.customization-studio-settings .cs-mobile-module { display: none; }
+@container (max-width: 650px) {
+  .customization-studio-settings .cs-integration-tabs { display: none; }
+  .customization-studio-settings .cs-mobile-module { display: block; width: 100%; margin-bottom: 12px; }
+}
+.customization-studio-settings .cs-primary-panel .setting-item-control input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
 }

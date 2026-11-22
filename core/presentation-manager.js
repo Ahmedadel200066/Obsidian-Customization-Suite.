@@ -89,8 +89,31 @@ class PresentationManager {
   async load() {
     const adapter=this.plugin.app.vault.adapter;
     this.persistedData=copy((await this.plugin.loadData())??null);
-    if(await adapter.exists(this.path)){
-      const raw=JSON.parse(await adapter.read(this.path));let recovery;
+    let raw, mainError, pendingRecovery = false;
+    if(await adapter.exists(this.path)) {
+      try { raw=JSON.parse(await adapter.read(this.path)); } catch(error) { mainError=error; }
+    }
+    // Keep the journal until BOTH files are committed. It also recovers the
+    // pending save left by older builds whose rename could not replace a file.
+    if(await adapter.exists(this.path+".tmp")) {
+      try {
+        const pending=JSON.parse(await adapter.read(this.path+".tmp"));
+        this.validateState(pending);
+        const current=JSON.stringify(this.persistedData);
+        if(pending.transaction && [pending.transaction.before,pending.transaction.after].some(value=>JSON.stringify(value)===current)) {
+          const {SettingsManager}=require("./settings-manager");
+          const checkSettings=new SettingsManager({loadData:async()=>pending.transaction.after});await checkSettings.load();
+          const {ProfileManager}=require("./profile-manager");new ProfileManager(checkSettings).load();
+          raw=pending;pendingRecovery=true;
+        }
+      } catch(error) {
+        console.warn("Customization Studio kept an unreadable pending-save journal; using the committed settings if valid.",error);
+      }
+    }
+    if(mainError&&!pendingRecovery)throw mainError;
+    if(!raw&&await adapter.exists(this.path+".tmp"))throw new Error("The pending Customization Studio save cannot be recovered safely. Keep the settings files and restore a matching backup pair.");
+    if(raw){
+      let recovery;
       if(raw.transaction){
         const current=JSON.stringify(this.persistedData),after=JSON.stringify(raw.transaction.after),before=JSON.stringify(raw.transaction.before);
         if(current!==after){
@@ -101,7 +124,9 @@ class PresentationManager {
         }
       }
       this.state=this.validateState(raw);
+      if(pendingRecovery)await this.writeSidecar(adapter,JSON.stringify(raw,null,2));
       if(recovery){await this.plugin.saveData(recovery);this.persistedData=copy(recovery);this.plugin.notifyUser?.("Recovered the latest Customization Studio settings after an interrupted save.");}
+      if(pendingRecovery)await this.clearPendingSave(adapter);
     }
     let created=false;
     if(!this.state.defaultProfileId||!this.pm.getProfile(this.state.defaultProfileId)) {
@@ -150,18 +175,41 @@ class PresentationManager {
   async backupSidecar(adapter,path) {
     // adapter.copy fails with EEXIST when the .bak already exists, so read and write (write overwrites). A failed backup never blocks the save and is logged once.
     try {
-      if(await adapter.exists(path))await adapter.write(path+".bak",await adapter.read(path));
+      if(await adapter.exists(path)){
+        const contents=await adapter.read(path);this.validateState(JSON.parse(contents));
+        await adapter.write(path+".bak",contents);
+      }
     } catch(error) {
       if(!this.backupWarned){this.backupWarned=true;console.warn("Customization Studio could not refresh studio-appearance.json.bak; saving without a new backup.",error);}
+    }
+  }
+  async writeSidecar(adapter,serialized) {
+    // DataAdapter.rename is not an overwrite API on every supported host.
+    // process is the public atomic read/modify/write API for existing files.
+    if(typeof adapter.process === "function" && await adapter.exists(this.path)) {
+      await adapter.process(this.path,()=>serialized);
+    } else {
+      // Public DataAdapter.write explicitly creates OR overwrites. The durable
+      // .tmp journal is retained if this compatibility path is interrupted.
+      await adapter.write(this.path,serialized);
+    }
+  }
+  async clearPendingSave(adapter) {
+    if(typeof adapter.remove !== "function")return;
+    try { if(await adapter.exists(this.path+".tmp"))await adapter.remove(this.path+".tmp"); }
+    catch(error) {
+      if(!this.pendingCleanupWarned){this.pendingCleanupWarned=true;console.warn("Customization Studio saved settings but could not remove its pending-save journal.",error);}
     }
   }
   async save(snapshot,state) {
     const adapter=this.plugin.app.vault.adapter,path=this.path,temp=path+".tmp";
     const next=this.legacyData(snapshot),document={...state,transaction:{before:this.persistedData??null,after:next}};
-    await adapter.write(temp,JSON.stringify(document,null,2));
+    const serialized=JSON.stringify(document,null,2);
+    await adapter.write(temp,serialized);
     await this.backupSidecar(adapter,path);
-    await adapter.rename(temp,path);
+    await this.writeSidecar(adapter,serialized);
     await this.plugin.saveData(next);this.persistedData=copy(next);
+    await this.clearPendingSave(adapter);
   }
 }
 module.exports={PresentationManager,detectMode,palette,copy};
