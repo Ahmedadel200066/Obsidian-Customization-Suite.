@@ -1,3 +1,4 @@
+require("./host-path-stub.cjs");
 const assert = require("node:assert/strict");
 const test = require("node:test");
 const { SettingsManager } = require("../core/settings-manager");
@@ -887,4 +888,35 @@ test("Day Planner styling does not override time geometry, event colors, or acti
   const css = module.styles(module.defaultSettings);
   assert.doesNotMatch(css, /--time-block-(?:height|top|left|width|position|bg-color|border-color-override)\s*:/);
   assert.match(css, /--time-block-border-radius: 6px/);
+});
+
+test("plugin discovery fails closed if optional registries are missing or throw", () => {
+  const { isTargetEnabled } = require("../core/plugin-discovery");
+  const community = { type: "community", ids: ["calendar"] };
+  const core = { type: "core", ids: ["bases"] };
+  assert.equal(isTargetEnabled({}, community), false);
+  assert.equal(isTargetEnabled({}, core), false);
+  assert.equal(isTargetEnabled({ plugins: { getPlugin() { throw new Error("API changed"); } } }, community), false);
+  assert.equal(isTargetEnabled({ internalPlugins: { getPluginById() { throw new Error("API changed"); } } }, core), false);
+  assert.equal(isTargetEnabled({ get plugins() { throw new Error("unavailable"); } }, community), false);
+  assert.equal(isTargetEnabled({ plugins: { enabledPlugins: { has: true } } }, community), false);
+  assert.equal(isTargetEnabled({ plugins: { getPlugin: () => ({}) } }, community), true);
+  assert.equal(isTargetEnabled({ internalPlugins: { plugins: { bases: { enabled: true } } } }, core), true);
+});
+
+test("local image paths use host normalization without permitting traversal", () => {
+  const image = kanban.validateSettings({ backgroundImage: "./Assets\\\\Covers//Cafe\u0301.png" }).backgroundImage;
+  assert.equal(image, "Assets/Covers/Café.png");
+  assert.throws(() => kanban.validateSettings({ backgroundImage: "Assets/../private.png" }), /relative path inside the vault/);
+  assert.throws(() => kanban.validateSettings({ backgroundImage: "C:\\private.png" }), /HTTP or HTTPS/);
+});
+
+test("core stylesheet paths use the host path normalizer", async () => {
+  const plugin = makePlugin();
+  plugin.manifest.dir = "vault-config\\plugins//customization-studio/";
+  plugin.app.vault.adapter.read = async (path) => {
+    assert.equal(path, "vault-config/plugins/customization-studio/styles.css");
+    return ".customization-studio-settings {}";
+  };
+  assert.equal(await new ThemeEngine(plugin).loadCoreCss(), true);
 });

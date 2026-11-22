@@ -1,3 +1,4 @@
+const { normalizePath } = require("obsidian");
 const VARIABLE_MAP = {
   accentColor: ["--cs-accent-color", "--interactive-accent"],
   surfaceColor: ["--cs-surface-color", "--background-primary"],
@@ -38,7 +39,7 @@ class ThemeEngine {
   async loadCoreCss() {
     const configDir = this.plugin.app.vault.configDir.replace(/\/+$/, "");
     const pluginDir = (this.plugin.manifest.dir || `${configDir}/plugins/${this.plugin.manifest.id}`).replace(/\/+$/, "");
-    const path = `${pluginDir}/styles.css`;
+    const path = normalizePath(`${pluginDir}/styles.css`);
     try {
       const css = await this.plugin.app.vault.adapter.read(path);
       this.setStyle("core", css);

@@ -1,3 +1,4 @@
+require("./host-path-stub.cjs");
 const assert = require("node:assert/strict");
 const Module = require("node:module");
 const test = require("node:test");
@@ -68,6 +69,7 @@ class FakeSetting {
   }
 
   setName(value) { this.name = value; return this; }
+  setHeading() { this.isHeading = true; return this; }
   setDesc() { return this; }
 
   addControl(method, callback) {
@@ -156,6 +158,8 @@ test("settings UI renders visual controls and previews/persists module edits", a
   const tab = new CustomizationSettingTab({ containerEl: new FakeElement() }, plugin);
   tab.display();
 
+  assert.equal(findElements(tab.containerEl, (element) => ["h1", "h2", "h3", "h4"].includes(element.tagName)).length, 0);
+  assert.ok(findElements(tab.containerEl, (element) => element.tagName === "button" && element.textContent === "Global appearance").length);
   const footers = findElements(tab.containerEl, (element) => element.tagName === "footer");
   assert.equal(footers.length, 1);
   assert.match(footers[0].children[0].textContent, /Support via plugin details/);
@@ -178,6 +182,7 @@ test("settings UI renders visual controls and previews/persists module edits", a
   let context = tab.viewContexts.get(tab.containerEl);
   tab.setViewState(context, { section: "integrations" });
   tab.refreshDisplay(context);
+  assert.ok(FakeSetting.records.some((setting) => setting.name === "Kanban" && setting.isHeading));
   for (const label of ["Default column color", "Drag visual style"]) {
     assert.ok(FakeSetting.records.some((setting) => setting.name === label));
   }

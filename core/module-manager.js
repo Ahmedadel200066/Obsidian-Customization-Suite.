@@ -1,4 +1,5 @@
 const MODULES = require("../modules");
+const { isTargetEnabled } = require("./plugin-discovery");
 
 class ModuleManager {
   constructor(plugin) {
@@ -88,25 +89,7 @@ class ModuleManager {
   }
 
   isTargetPluginEnabled(module) {
-    if (module.target.type === "core") {
-      const internalPlugins = this.plugin.app.internalPlugins;
-      if (!internalPlugins) return false;
-      for (const pluginId of module.target.ids) {
-        const plugin = typeof internalPlugins.getPluginById === "function"
-          ? internalPlugins.getPluginById(pluginId)
-          : internalPlugins.plugins?.[pluginId];
-        if (plugin?.enabled === true) return true;
-        if (typeof internalPlugins.getEnabledPluginById === "function" &&
-            internalPlugins.getEnabledPluginById(pluginId)) return true;
-      }
-      return false;
-    }
-    const plugins = this.plugin.app.plugins;
-    for (const pluginId of module.target.ids) {
-      if (plugins?.enabledPlugins?.has(pluginId)) return true;
-      if (plugins?.getPlugin?.(pluginId)) return true;
-    }
-    return false;
+    return isTargetEnabled(this.plugin.app, module.target);
   }
 
   getDetectedColumns(moduleId) {

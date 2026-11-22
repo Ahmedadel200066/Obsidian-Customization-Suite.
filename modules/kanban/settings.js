@@ -1,3 +1,4 @@
+const { normalizePath } = require("obsidian");
 const { createDefaults, validateSettings } = require("../settings-utils");
 
 const SCHEMA = {
@@ -136,7 +137,7 @@ function validate(value) {
       /[\u0000-\u001f]/.test(normalizedPath)) {
     throw new Error("Kanban background image must be a relative path inside the vault.");
   }
-  result.backgroundImage = normalizedPath;
+  result.backgroundImage = normalizePath(normalizedPath);
   return result;
 }
 

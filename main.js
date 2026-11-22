@@ -255,6 +255,7 @@ var require_settings_utils = __commonJS({
 // modules/kanban/settings.js
 var require_settings = __commonJS({
   "modules/kanban/settings.js"(exports2, module2) {
+    var { normalizePath } = require("obsidian");
     var { createDefaults, validateSettings } = require_settings_utils();
     var SCHEMA = {
       automaticColumnColors: { type: "boolean", default: true },
@@ -387,7 +388,7 @@ var require_settings = __commonJS({
       if (normalizedPath.startsWith("/") || /^[a-z]:\//i.test(normalizedPath) || normalizedPath.split("/").some((part) => part === "..") || /[\u0000-\u001f]/.test(normalizedPath)) {
         throw new Error("Kanban background image must be a relative path inside the vault.");
       }
-      result.backgroundImage = normalizedPath;
+      result.backgroundImage = normalizePath(normalizedPath);
       return result;
     }
     module2.exports = {
@@ -2092,6 +2093,7 @@ var require_profile_manager = __commonJS({
 // core/theme-engine.js
 var require_theme_engine = __commonJS({
   "core/theme-engine.js"(exports2, module2) {
+    var { normalizePath } = require("obsidian");
     var VARIABLE_MAP = {
       accentColor: ["--cs-accent-color", "--interactive-accent"],
       surfaceColor: ["--cs-surface-color", "--background-primary"],
@@ -2128,7 +2130,7 @@ var require_theme_engine = __commonJS({
       async loadCoreCss() {
         const configDir = this.plugin.app.vault.configDir.replace(/\/+$/, "");
         const pluginDir = (this.plugin.manifest.dir || `${configDir}/plugins/${this.plugin.manifest.id}`).replace(/\/+$/, "");
-        const path = `${pluginDir}/styles.css`;
+        const path = normalizePath(`${pluginDir}/styles.css`);
         try {
           const css = await this.plugin.app.vault.adapter.read(path);
           this.setStyle("core", css);
@@ -2224,10 +2226,38 @@ body.customization-studio-enabled[data-customization-studio-profile="${profile.i
   }
 });
 
+// core/plugin-discovery.js
+var require_plugin_discovery = __commonJS({
+  "core/plugin-discovery.js"(exports2, module2) {
+    function isTargetEnabled(app, target) {
+      for (const id of target.ids) {
+        try {
+          if (target.type === "core") {
+            const registry = app?.internalPlugins;
+            if (!registry) continue;
+            if (registry.getEnabledPluginById?.(id)) return true;
+            const entry = typeof registry.getPluginById === "function" ? registry.getPluginById(id) : registry.plugins?.[id];
+            if (entry?.enabled === true) return true;
+          } else {
+            const registry = app?.plugins;
+            if (!registry) continue;
+            if (registry.enabledPlugins?.has?.(id)) return true;
+            if (typeof registry.getPlugin === "function" && registry.getPlugin(id)) return true;
+          }
+        } catch {
+        }
+      }
+      return false;
+    }
+    module2.exports = { isTargetEnabled };
+  }
+});
+
 // core/module-manager.js
 var require_module_manager = __commonJS({
   "core/module-manager.js"(exports2, module2) {
     var MODULES = require_modules();
+    var { isTargetEnabled } = require_plugin_discovery();
     var ModuleManager2 = class {
       constructor(plugin) {
         this.plugin = plugin;
@@ -2308,22 +2338,7 @@ var require_module_manager = __commonJS({
         this.plugin.profileManager.setModuleEnabled(moduleId, enabled);
       }
       isTargetPluginEnabled(module3) {
-        if (module3.target.type === "core") {
-          const internalPlugins = this.plugin.app.internalPlugins;
-          if (!internalPlugins) return false;
-          for (const pluginId of module3.target.ids) {
-            const plugin = typeof internalPlugins.getPluginById === "function" ? internalPlugins.getPluginById(pluginId) : internalPlugins.plugins?.[pluginId];
-            if (plugin?.enabled === true) return true;
-            if (typeof internalPlugins.getEnabledPluginById === "function" && internalPlugins.getEnabledPluginById(pluginId)) return true;
-          }
-          return false;
-        }
-        const plugins = this.plugin.app.plugins;
-        for (const pluginId of module3.target.ids) {
-          if (plugins?.enabledPlugins?.has(pluginId)) return true;
-          if (plugins?.getPlugin?.(pluginId)) return true;
-        }
-        return false;
+        return isTargetEnabled(this.plugin.app, module3.target);
       }
       getDetectedColumns(moduleId) {
         const controller = this.controllers.get(moduleId);
@@ -2408,7 +2423,6 @@ var require_settings_tab = __commonJS({
         containerEl.empty();
         containerEl.addClass("customization-studio-settings");
         const header = containerEl.createEl("header", { cls: "cs-settings-header" });
-        header.createEl("h2", { text: "Customization Studio" });
         header.createEl("p", {
           text: "Visual profiles for Obsidian and supported plugins. Settings preview immediately and save automatically."
         });
@@ -2417,7 +2431,7 @@ var require_settings_tab = __commonJS({
           cls: "cs-active-profile-header",
           attr: { "aria-label": `Active profile: ${activeProfile.name}`, "aria-live": "polite" }
         });
-        profileHeader.createEl("span", { cls: "cs-active-profile-badge", text: "ACTIVE PROFILE" });
+        profileHeader.createEl("span", { cls: "cs-active-profile-badge", text: "Active profile" });
         const profileName = profileHeader.createEl("strong", { text: activeProfile.name });
         const swatches = profileHeader.createEl("div", {
           cls: "cs-profile-swatches",
@@ -2456,7 +2470,7 @@ var require_settings_tab = __commonJS({
         });
         context.panel = panel;
         const tabs = [
-          ["global", "Global Appearance"],
+          ["global", "Global appearance"],
           ["profiles", "Profiles"],
           ["integrations", "Integrations"]
         ];
@@ -2496,7 +2510,7 @@ var require_settings_tab = __commonJS({
           delete context.focusPrimaryTab;
         }
         if (context.section === "global") {
-          panel.setAttribute("aria-label", "Global Appearance");
+          panel.setAttribute("aria-label", "Global appearance");
           this.displayGlobalSettings(panel, context);
         } else if (context.section === "profiles") {
           panel.setAttribute("aria-label", "Profiles");
@@ -2645,7 +2659,7 @@ var require_settings_tab = __commonJS({
         const active = this.plugin.profileManager.getActiveProfile();
         const isCustom = this.plugin.profileManager.customProfiles.some((profile) => profile.id === active.id);
         const section = containerEl.createEl("div", { cls: "cs-section" });
-        section.createEl("h3", { text: "Profiles" });
+        new Setting(section).setName("Profiles").setHeading();
         section.createEl("p", {
           text: `Editing profiles. The active profile is "${active.name}".`
         });
@@ -2741,7 +2755,6 @@ var require_settings_tab = __commonJS({
       displayGlobalSettings(containerEl, context) {
         const profile = this.plugin.profileManager.getActiveProfile();
         const section = containerEl.createEl("div", { cls: "cs-section" });
-        section.createEl("h3", { text: "Global appearance" });
         if (!this.isCustom(profile)) {
           section.createEl("p", { text: "Duplicate the active built-in profile to edit its settings." });
           return;
@@ -2830,7 +2843,6 @@ var require_settings_tab = __commonJS({
       displayModules(containerEl, context) {
         const profile = this.plugin.profileManager.getActiveProfile();
         const section = containerEl.createEl("div", { cls: "cs-section cs-integrations" });
-        section.createEl("h3", { text: "Integrations" });
         if (!this.isCustom(profile)) {
           section.createEl("p", { text: "Duplicate the active built-in profile to configure modules." });
           return;
@@ -2890,7 +2902,7 @@ var require_settings_tab = __commonJS({
       displayModule(containerEl, module3, profile, context) {
         const detected = this.plugin.moduleManager.isTargetPluginEnabled(module3);
         const section = containerEl.createEl("div", { cls: "cs-module-section" });
-        section.createEl("h4", { text: module3.name });
+        new Setting(section).setName(module3.name).setHeading();
         section.createEl("p", {
           text: detected ? "Target detected. Styling applies when a matching view is open." : module3.target.type === "core" ? "Obsidian Core Plugin is not enabled or its API is unavailable." : "Community plugin is not enabled."
         });

@@ -47,6 +47,34 @@ Screenshots are not available yet.
 - Modular source architecture supports future integrations without adding
   placeholder modules to the current release.
 
+## Network and privacy
+
+Customization Studio has no required account, paid feature, analytics service,
+or backend. Its runtime code does not upload notes or task content. Profiles,
+visual settings, and custom CSS are stored locally through Obsidian's plugin
+data API. Exporting a profile copies its settings and CSS to your clipboard;
+review them before sharing, as they may include vault-relative paths or URLs.
+
+Network requests are optional and depend on what you configure:
+
+- A remote Kanban background is loaded directly by your device from the
+  HTTP(S) image URL you enter. The image host receives your IP address and
+  ordinary request information. There is no fixed image service or proxy.
+  Use a vault-local image to avoid this remote request.
+- Custom CSS can also load remote resources, for example through `url()` or
+  fonts. Global profile CSS can use `@import`. Module CSS rejects `@import`
+  and scopes selectors, but does not block resource URLs. Selector scoping
+  is not a security sandbox. Imported profiles can contain CSS and image
+  URLs, so only import profiles or paste CSS from sources you trust.
+- Opening the optional Buy Me a Coffee support link visits that service in
+  your browser. It is not needed to use the plugin.
+
+The runtime reads its own stylesheet in Obsidian's configuration folder and
+resolves user-selected local background images inside the vault. It does not
+require access to files outside the vault. It does not modify note content,
+other plugins' settings, task dates, or review schedules. Obsidian's own sync
+or installed extensions may handle data separately from this plugin.
+
 ## Supported integrations
 
 ### Kanban

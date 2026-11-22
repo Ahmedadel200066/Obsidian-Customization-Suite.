@@ -50,7 +50,6 @@ class CustomizationSettingTab extends PluginSettingTab {
     containerEl.empty();
     containerEl.addClass("customization-studio-settings");
     const header = containerEl.createEl("header", { cls: "cs-settings-header" });
-    header.createEl("h2", { text: "Customization Studio" });
     header.createEl("p", {
       text: "Visual profiles for Obsidian and supported plugins. Settings preview immediately and save automatically."
     });
@@ -59,7 +58,7 @@ class CustomizationSettingTab extends PluginSettingTab {
       cls: "cs-active-profile-header",
       attr: { "aria-label": `Active profile: ${activeProfile.name}`, "aria-live": "polite" }
     });
-    profileHeader.createEl("span", { cls: "cs-active-profile-badge", text: "ACTIVE PROFILE" });
+    profileHeader.createEl("span", { cls: "cs-active-profile-badge", text: "Active profile" });
     const profileName = profileHeader.createEl("strong", { text: activeProfile.name });
     const swatches = profileHeader.createEl("div", {
       cls: "cs-profile-swatches",
@@ -101,7 +100,7 @@ class CustomizationSettingTab extends PluginSettingTab {
     });
     context.panel = panel;
     const tabs = [
-      ["global", "Global Appearance"],
+      ["global", "Global appearance"],
       ["profiles", "Profiles"],
       ["integrations", "Integrations"]
     ];
@@ -144,7 +143,7 @@ class CustomizationSettingTab extends PluginSettingTab {
     }
 
     if (context.section === "global") {
-      panel.setAttribute("aria-label", "Global Appearance");
+      panel.setAttribute("aria-label", "Global appearance");
       this.displayGlobalSettings(panel, context);
     } else if (context.section === "profiles") {
       panel.setAttribute("aria-label", "Profiles");
@@ -304,7 +303,7 @@ class CustomizationSettingTab extends PluginSettingTab {
     const active = this.plugin.profileManager.getActiveProfile();
     const isCustom = this.plugin.profileManager.customProfiles.some((profile) => profile.id === active.id);
     const section = containerEl.createEl("div", { cls: "cs-section" });
-    section.createEl("h3", { text: "Profiles" });
+    new Setting(section).setName("Profiles").setHeading();
     section.createEl("p", {
       text: `Editing profiles. The active profile is "${active.name}".`
     });
@@ -447,7 +446,6 @@ class CustomizationSettingTab extends PluginSettingTab {
   displayGlobalSettings(containerEl, context) {
     const profile = this.plugin.profileManager.getActiveProfile();
     const section = containerEl.createEl("div", { cls: "cs-section" });
-    section.createEl("h3", { text: "Global appearance" });
     if (!this.isCustom(profile)) {
       section.createEl("p", { text: "Duplicate the active built-in profile to edit its settings." });
       return;
@@ -550,7 +548,6 @@ class CustomizationSettingTab extends PluginSettingTab {
   displayModules(containerEl, context) {
     const profile = this.plugin.profileManager.getActiveProfile();
     const section = containerEl.createEl("div", { cls: "cs-section cs-integrations" });
-    section.createEl("h3", { text: "Integrations" });
     if (!this.isCustom(profile)) {
       section.createEl("p", { text: "Duplicate the active built-in profile to configure modules." });
       return;
@@ -614,7 +611,7 @@ class CustomizationSettingTab extends PluginSettingTab {
   displayModule(containerEl, module, profile, context) {
     const detected = this.plugin.moduleManager.isTargetPluginEnabled(module);
     const section = containerEl.createEl("div", { cls: "cs-module-section" });
-    section.createEl("h4", { text: module.name });
+    new Setting(section).setName(module.name).setHeading();
     section.createEl("p", {
       text: detected
         ? "Target detected. Styling applies when a matching view is open."
