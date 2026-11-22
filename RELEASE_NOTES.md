@@ -1,7 +1,7 @@
-# Customization Studio 0.1.0
+# Customization Studio 0.1.1
 
-First packaged release for manual vault testing. This is not a Community
-Plugins listing and has not been submitted to Obsidian.
+Patch release for scan findings and safer integration handling. This is not
+a Community Plugins listing and has not been submitted to Obsidian.
 
 ## Install
 
@@ -17,9 +17,24 @@ If your vault uses a different configuration folder, use that folder instead
 of `.obsidian`. Test in a disposable vault or back up your existing plugin
 folder and data.json first. Do not overwrite data.json.
 
-Alternatively, extract `Customization-Studio.zip` into that plugin directory.
-The ZIP has the three runtime files and the MIT license at its root. GitHub's
-automatic source-code archives are not the installable ZIP.
+This release attaches exactly those three files. GitHub's automatic source-code
+archives are not runtime packages. The MIT license remains in the repository
+and its full notice is embedded in main.js.
+
+## Changes since 0.1.0
+
+- Removed the host application's name from the manifest description to meet
+  the directory scan rule.
+- Kept active-tab fallback colors without duplicate background declarations.
+- Added GitHub build provenance attestations for the three runtime assets.
+- Removed the optional ZIP and separate LICENSE from future release uploads.
+- Clarified external images, imported CSS, and user-clicked clipboard export
+  in the privacy documentation. No backend or analytics was added.
+- Updated settings headings to the host API and sentence case.
+- Guarded plugin discovery and normalized vault-relative plugin/CSS paths.
+
+Published 0.1.0 assets and its tag are unchanged. This release does not imply
+that the directory review passed or that manual vault testing is complete.
 
 ## Included
 
