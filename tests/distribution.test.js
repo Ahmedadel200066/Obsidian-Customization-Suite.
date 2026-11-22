@@ -81,7 +81,7 @@ test("active-tab CSS keeps its fallback without duplicate background declaration
 test("release preserves the prior compatibility mapping and all version files agree", () => {
   const version = JSON.parse(read("manifest.json")).version;
   const lock = JSON.parse(read("package-lock.json"));
-  assert.equal(version, "1.3.0");
+  assert.equal(version, "1.4.0");
   assert.equal(JSON.parse(read("package.json")).version, version);
   assert.equal(lock.version, version);
   assert.equal(lock.packages[""].version, version);
@@ -89,5 +89,6 @@ test("release preserves the prior compatibility mapping and all version files ag
   assert.equal(versions["0.1.0"], "1.9.0");
   assert.equal(versions["0.1.1"], "1.9.0");
   assert.equal(versions["1.2.0"], "1.9.0");
+  assert.equal(versions["1.3.0"], "1.9.0");
   assert.equal(versions[version], "1.9.0");
 });

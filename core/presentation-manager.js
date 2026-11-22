@@ -169,6 +169,25 @@ class PresentationManager {
   setShapeOptions(shape,update) {if(!this.pm.customProfiles.some(p=>p.id===this.plugin.settingsManager.settings.activeProfileId))throw new Error("Create an editable profile first.");this.meta().shapes.options[shape]=validateShapeOptions(shape,{...this.getShapeOptions(shape),...update});this.pendingShapeTarget=true;this.pm.getProfile(this.plugin.settingsManager.settings.activeProfileId).moduleEnabled.bases=true;}
   resetShape(shape) {this.meta().shapes.options[shape]=validateShapeOptions(shape);this.pendingShapeTarget=true;}
   resetGlobal() {const {meta,mode,value}=this.variant(this.plugin.settingsManager.settings.activeProfileId);value.variables=copy(meta.baseline?.[mode]?.variables||this.captureVariables());value.globalKeys=[];this.pm.getProfile(this.plugin.settingsManager.settings.activeProfileId).variables=copy(value.variables);}
+  resetControl(scope,key) {
+    const id=this.plugin.settingsManager.settings.activeProfileId;
+    if(!this.pm.customProfiles.some(profile=>profile.id===id))throw new Error("Duplicate the preset before editing its controls.");
+    const {meta,mode,value}=this.variant(id),base=this.pm.getProfile(id);
+    if(scope==="global") {
+      if(!Object.hasOwn(base.variables,key))throw new Error("Unknown appearance control.");
+      const restored=meta.baseline[mode].variables[key];
+      value.variables[key]=copy(restored);base.variables[key]=copy(restored);
+      value.globalKeys=value.globalKeys.filter(item=>item!==key);
+      return restored;
+    }
+    const module=this.pm.modules.find(item=>item.id===scope);
+    if(!module||!Object.hasOwn(module.settingsSchema,key)||key==="cardsShape")throw new Error("Unknown or separately managed integration control.");
+    const restored=meta.baseline[mode].modules[scope][key]??module.defaultSettings[key];
+    value.modules[scope][key]=copy(restored);base.modules[scope][key]=copy(restored);
+    const keys=(value.moduleKeys[scope]||[]).filter(item=>item!==key);
+    if(keys.length)value.moduleKeys[scope]=keys;else delete value.moduleKeys[scope];
+    return restored;
+  }
   resetModule(moduleId) {const {meta,mode,value}=this.variant(this.plugin.settingsManager.settings.activeProfileId);value.modules[moduleId]=copy(meta.baseline?.[mode]?.modules?.[moduleId]||this.pm.modules.find(m=>m.id===moduleId).defaultSettings);delete value.moduleKeys[moduleId];const base=this.pm.getProfile(this.plugin.settingsManager.settings.activeProfileId);base.modules[moduleId]=copy(value.modules[moduleId]);base.moduleEnabled[moduleId]=false;if(moduleId==="bases"){meta.shapes={selected:"standard",options:{}};}}
   snapshot() {return copy(this.state);}
   legacyData(snapshot) {const value=copy(snapshot);for(const profile of value.customProfiles||[])if(profile.modules?.bases)delete profile.modules.bases.cardsShape;return value;}

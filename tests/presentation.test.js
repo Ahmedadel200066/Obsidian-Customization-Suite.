@@ -116,3 +116,36 @@ test('failed sidecar commit keeps data.json unchanged and its pending journal av
  assert.equal(JSON.stringify(f.data()),before);assert.ok(f.files.has(f.p.path+'.tmp'));
  const restarted=await fixture({data:f.data(),files:f.files});assert.equal(restarted.pm.getActiveProfile().modules.kanban.cardRadius,25);
 });
+
+test('one-control resets remove only the current-variant override and keep other controls and profiles',async()=>{
+ const f=await fixture();f.p.setMode('light');
+ f.pm.updateModuleSettings('kanban',{cardBackground:'#123456',cardRadius:23});
+ f.pm.updateActiveProfile({variables:{accentColor:'#aabbcc',textColor:'#112244'}});
+ const originalId=f.pm.getActiveProfile().id;
+ const other=f.pm.createFromDefault();const otherId=other.id;
+ f.pm.setActiveProfile(originalId);f.p.setMode('dark');
+ f.pm.updateModuleSettings('kanban',{cardBackground:'#765432'});
+ f.pm.updateActiveProfile({variables:{accentColor:'#ccbbaa'}});
+ f.p.setMode('light');const baseline=f.p.meta().baseline.light;
+ f.p.resetControl('kanban','cardBackground');f.p.resetControl('global','accentColor');
+ let active=f.pm.getActiveProfile();
+ assert.equal(active.modules.kanban.cardBackground,baseline.modules.kanban.cardBackground);
+ assert.equal(active.modules.kanban.cardRadius,23);assert.equal(active.moduleEnabled.kanban,true);
+ assert.deepEqual(active.studio.moduleKeys.kanban,['cardRadius']);
+ assert.equal(active.variables.accentColor,baseline.variables.accentColor);assert.deepEqual(active.studio.globalKeys,['textColor']);
+ f.p.setMode('dark');assert.equal(f.pm.getActiveProfile().modules.kanban.cardBackground,'#765432');assert.equal(f.pm.getActiveProfile().variables.accentColor,'#ccbbaa');
+ f.pm.setActiveProfile(otherId);assert.equal(f.pm.getActiveProfile().modules.kanban.cardBackground,'#123456');
+ f.pm.setActiveProfile(originalId);await f.save();const restarted=await fixture({data:f.data(),files:f.files});
+ restarted.p.setMode('light');assert.deepEqual(restarted.pm.getActiveProfile().studio.moduleKeys.kanban,['cardRadius']);
+ assert.throws(()=>f.p.resetControl('kanban','unknown'),/Unknown/);assert.throws(()=>f.p.resetControl('global','unknown'),/Unknown/);
+ f.pm.setActiveProfile('minimal');assert.throws(()=>f.p.resetControl('kanban','cardRadius'),/Duplicate/);
+});
+
+test('resetting the last neutral control returns the integration to no emitted override CSS',async()=>{
+ const f=await fixture();f.pm.updateModuleSettings('kanban',{cardBackground:'#123456'});
+ f.p.resetControl('kanban','cardBackground');const active=f.pm.getActiveProfile();
+ assert.equal(active.studio.moduleKeys.kanban,undefined);
+ const module=f.pm.modules.find(m=>m.id==='kanban');
+ assert.equal(selectiveStyles(module,active.modules.kanban,{resolvedBackgroundImage:'',columnColorTokens:new Map()},active.studio.moduleKeys.kanban||[]),'');
+ await f.save();const restarted=await fixture({data:f.data(),files:f.files});assert.equal(restarted.pm.getActiveProfile().studio.moduleKeys.kanban,undefined);
+});

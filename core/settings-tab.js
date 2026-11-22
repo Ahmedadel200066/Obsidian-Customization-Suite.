@@ -51,6 +51,7 @@ class CustomizationSettingTab extends PluginSettingTab {
     context.tabResizeObservers = [];
     containerEl.empty();
     containerEl.addClass("customization-studio-settings");
+    context.overrideIndicators = [];
     context.preview = null;
     context.hasCompactToolbar = true;
     if (context.section === "profiles") context.section = "advanced";
@@ -124,9 +125,57 @@ class CustomizationSettingTab extends PluginSettingTab {
     else { panel.setAttribute("aria-label", "Advanced");this.displayAdvancedSettings(panel, context); }
     context.searchStatus = panel.createEl("p", { cls: "cs-search-status", attr: { role: "status", "aria-live": "polite" } });
     this.filterPage(context);
+    this.animatePanel(context, `${context.section}:${context.moduleId}`);
     const footer = containerEl.createEl("footer", { cls: "cs-settings-footer" });
     footer.createEl("p", { text: "Support via plugin details." });
     containerEl.scrollTop = context.scrollTop;
+  }
+
+  reducedMotion(context) {
+    return context?.containerEl?.ownerDocument?.defaultView?.matchMedia?.("(prefers-reduced-motion: reduce)").matches === true;
+  }
+
+  animatePanel(context,key) {
+    if(context.lastPanelKey&&context.lastPanelKey!==key&&!this.reducedMotion(context)) {
+      context.panel?.animate?.([{opacity:0.9,transform:"translateY(4px)"},{opacity:1,transform:"translateY(0)"}],{duration:160,easing:"ease-out"});
+    }
+    context.lastPanelKey=key;
+  }
+
+  createControlGroup(containerEl,title,context,key,defaultOpen=false) {
+    const group=containerEl.createEl("details",{cls:"cs-subsection"});
+    group.open=context?.groupStates?.[key]??defaultOpen;
+    group.createEl("summary",{text:title});
+    group.addEventListener("toggle",()=>{
+      if(!context?.searchQuery){context.groupStates||={};context.groupStates[key]=group.open;}
+      if(group.open&&!this.reducedMotion(context))for(const child of [...group.children].slice(1))child.animate?.([{opacity:0.85,transform:"translateY(2px)"},{opacity:1,transform:"translateY(0)"}],{duration:140,easing:"ease-out"});
+    });
+    return group;
+  }
+
+  decorateControl(setting,scope,key,component,context,initialProfile,onResetValue=()=>{}) {
+    if(!this.plugin.presentation||!setting.settingEl||key==="cardsShape")return;
+    setting.settingEl.dataset.csControlScope=scope;setting.settingEl.dataset.csControlKey=key;
+    const info=setting.infoEl||setting.settingEl.querySelector?.(".setting-item-info");
+    const badge=info?.createEl("span",{cls:"cs-control-state",attr:{"aria-live":"polite"}});
+    const reset=setting.controlEl?.createEl("button",{text:"Reset",cls:"cs-control-reset",attr:{type:"button","aria-label":`Reset ${key} override`}});
+    const refresh=(profile=this.plugin.profileManager.getActiveProfile())=>{
+      const keys=scope==="global"?profile.studio?.globalKeys:profile.studio?.moduleKeys[scope];
+      const modified=keys?.includes(key)===true;
+      const inherited=profile.studio?.neutral&&(scope!=="global"||profile.studio.appearance==="auto");
+      if(badge){badge.textContent=modified?"Modified":inherited?"Inherited":"Profile default";badge.dataset.state=modified?"modified":"inherited";badge.title=inherited&&!modified?"Native styling is active. The control shows the stored profile baseline, not a live theme readout.":"This value belongs to the current profile variant.";}
+      if(reset){reset.disabled=!modified;reset.title=inherited?"Remove only this override and inherit native styling.":"Restore this control to the profile baseline.";}
+    };
+    reset?.addEventListener("click",()=>this.runChange(async()=>{
+      const restored=this.plugin.presentation.resetControl(scope,key);
+      const pending=this.pendingInputs.get(component?.inputEl);
+      if(pending){clearTimeout(pending.timer);this.pendingInputs.delete(component.inputEl);}
+      component?.setValue(restored);onResetValue(restored);
+      (component?.colorPickerEl||component?.sliderEl||component?.selectEl||component?.toggleEl||component?.inputEl)?.focus?.();
+      this.plugin.applyCustomization();this.refreshProfilePreview(context);
+      await this.persistChange(context,true);
+    }));
+    (context.overrideIndicators||=[]).push(refresh);refresh(initialProfile);
   }
 
   filterPage(context) {
@@ -454,77 +503,31 @@ class CustomizationSettingTab extends PluginSettingTab {
       return;
     }
 
-    if(profile.studio?.neutral)section.createEl("p",{text:"Native styling is inherited until you change a control. These colors are captured from the current theme; this is not a replacement for your theme or CSS snippets."});
-    this.addColorControl(section, "Accent color", profile.variables.accentColor,
-      (value) => this.updateProfile({ variables: { accentColor: value } }, context));
-    this.addColorControl(section, "Surface color", profile.variables.surfaceColor,
-      (value) => this.updateProfile({ variables: { surfaceColor: value } }, context));
-    this.addColorControl(section, "Text color", profile.variables.textColor,
-      (value) => this.updateProfile({ variables: { textColor: value } }, context));
-    new Setting(section)
-      .setName("Tab bar background opacity")
-      .setDesc("Affects the tab header container background only; labels and icons stay fully opaque.")
-      .addSlider((slider) => slider
-        .setLimits(0, 100, 1)
-        .setValue(profile.variables.tabBarOpacity)
-        .setDynamicTooltip()
-        .onChange((value) => this.updateProfile({ variables: { tabBarOpacity: value } }, context)));
-    new Setting(section)
-      .setName("Tab bar backdrop blur")
-      .setDesc("Uses backdrop-filter where supported. Blur shows through translucent backgrounds; zero disables it.")
-      .addSlider((slider) => slider
-        .setLimits(0, 24, 1)
-        .setValue(profile.variables.tabBarBlur)
-        .setDynamicTooltip()
-        .onChange((value) => this.updateProfile({ variables: { tabBarBlur: value } }, context)));
-    this.addColorControl(section, "Tab bar gradient color", profile.variables.tabBarGradientColor,
-      (value) => this.updateProfile({ variables: { tabBarGradientColor: value } }, context));
-    new Setting(section)
-      .setName("Tab bar gradient type")
-      .setDesc("Choose linear, elliptical radial, or circular radial gradient.")
-      .addDropdown((dropdown) => {
-        dropdown.addOption("linear", "Linear");
-        dropdown.addOption("radial", "Radial");
-        dropdown.addOption("circle", "Circular radial");
-        dropdown.setValue(profile.variables.tabBarGradientType)
-          .onChange((value) => this.updateProfile({ variables: { tabBarGradientType: value } }, context));
-      });
-    new Setting(section)
-      .setName("Tab bar gradient direction")
-      .setDesc("Direction is used by linear gradients.")
-      .addDropdown((dropdown) => {
-        for (const direction of [
-          "to right", "to left", "to bottom", "to top",
-          "to bottom right", "to bottom left", "to top right", "to top left"
-        ]) dropdown.addOption(direction, direction);
-        dropdown.setValue(profile.variables.tabBarGradientDirection)
-          .onChange((value) => this.updateProfile({
-            variables: { tabBarGradientDirection: value }
-          }, context));
-      });
-    new Setting(section)
-      .setName("Tab bar radial gradient position")
-      .setDesc("Position is used by radial and circular radial gradients.")
-      .addDropdown((dropdown) => {
-        for (const position of [
-          "center", "top", "bottom", "left", "right",
-          "top left", "top right", "bottom left", "bottom right"
-        ]) dropdown.addOption(position, position);
-        dropdown.setValue(profile.variables.tabBarGradientPosition)
-          .onChange((value) => this.updateProfile({
-            variables: { tabBarGradientPosition: value }
-          }, context));
-      });
-    new Setting(section)
-      .setName("Tab bar gradient intensity")
-      .setDesc("Set the gradient opacity. Zero disables the gradient.")
-      .addSlider((slider) => slider
-        .setLimits(0, 100, 1)
-        .setValue(profile.variables.tabBarGradientIntensity)
-        .setDynamicTooltip()
-        .onChange((value) => this.updateProfile({
-          variables: { tabBarGradientIntensity: value }
-        }, context)));
+    new Setting(section).setName("Appearance").setHeading();
+    section.createEl("p",{cls:"cs-section-description",text:"Make it yours. Reset removes one override without changing your other settings."});
+    const basics=this.createControlGroup(section,"Colors",context,"global:colors",true);
+    const more=this.createControlGroup(section,"Tab bar details",context,"global:tabs");
+    const controls=[
+      {key:"accentColor",name:"Accent color",type:"color"},
+      {key:"surfaceColor",name:"Surface color",type:"color"},
+      {key:"textColor",name:"Text color",type:"color"},
+      {key:"tabBarOpacity",name:"Tab bar background opacity",type:"range",min:0,max:100,desc:"Tab header background only. Labels and icons stay fully opaque."},
+      {key:"tabBarBlur",name:"Tab bar backdrop blur",type:"range",min:0,max:24,desc:"Visible through a translucent tab bar. Zero disables blur."},
+      {key:"tabBarGradientColor",name:"Tab bar gradient color",type:"color"},
+      {key:"tabBarGradientType",name:"Tab bar gradient type",options:["linear","radial","circle"]},
+      {key:"tabBarGradientDirection",name:"Tab bar gradient direction",options:["to right","to left","to bottom","to top","to bottom right","to bottom left","to top right","to top left"]},
+      {key:"tabBarGradientPosition",name:"Tab bar radial gradient position",options:["center","top","bottom","left","right","top left","top right","bottom left","bottom right"]},
+      {key:"tabBarGradientIntensity",name:"Tab bar gradient intensity",type:"range",min:0,max:100,desc:"Zero disables the gradient."}
+    ];
+    for(const control of controls){
+      const setting=new Setting(control.key.startsWith("tabBar")?more:basics).setName(control.name);
+      if(control.desc)setting.setDesc(control.desc);
+      let component;const update=value=>this.updateProfile({variables:{[control.key]:value}},context);
+      if(control.type==="color")setting.addColorPicker(picker=>{component=picker;picker.setValue(profile.variables[control.key]).onChange(update);});
+      else if(control.type==="range")setting.addSlider(slider=>{component=slider;slider.setLimits(control.min,control.max,1).setValue(profile.variables[control.key]).setDynamicTooltip().onChange(update);});
+      else setting.addDropdown(dropdown=>{component=dropdown;for(const option of control.options)dropdown.addOption(option,option);dropdown.setValue(profile.variables[control.key]).onChange(update);});
+      this.decorateControl(setting,"global",control.key,component,context,profile);
+    }
     new Setting(section)
       .setName("Reset global appearance")
       .setDesc("Returns global controls to the captured Default baseline without imposing a preset.")
@@ -629,19 +632,19 @@ class CustomizationSettingTab extends PluginSettingTab {
     new Setting(section).setName(module.name).setHeading();
     section.createEl("p", {
       text: detected
-        ? "Target detected. Styling applies when a matching view is open."
+        ? "Detected. Styling applies to open views."
         : module.target.type === "core"
           ? "Obsidian Core Plugin is not enabled or its API is unavailable."
           : "Community plugin is not enabled."
     });
 
     if(context){context.themeColorToggle=null;context.integrationEnabledToggle=null;}
-    if(profile.studio?.neutral)section.createEl("p",{text:"Untouched controls inherit native styling. Changing a control enables this integration and overrides only that control, not a preset palette."});
+    section.createEl("p", { cls: "cs-section-description", text: "Inherited controls keep native styling. Modify a control to override it." });
     if (module.compatibilityNote) section.createEl("p", { cls: "cs-compatibility-note", text: module.compatibilityNote });
 
     new Setting(section)
       .setName("Enable customization")
-      .setDesc("Turning this off removes this integration's effects. Changing a control enables it again; master pause still wins.")
+      .setDesc("Edits enable this integration automatically. Master pause still applies.")
       .addToggle((toggle) => { if(context)context.integrationEnabledToggle={id:module.id,toggle};return toggle
         .setValue(profile.moduleEnabled[module.id] !== false)
         .onChange((value) => this.runChange(async () => {
@@ -650,19 +653,23 @@ class CustomizationSettingTab extends PluginSettingTab {
           this.refreshProfilePreview(context);
         }));});
 
-    for (const group of module.controlGroups) {
-      const groupEl = section.createEl("details", { cls: "cs-subsection", attr: { open: true } });
-      groupEl.createEl("summary", { text: group.name });
-      for (const control of group.controls) {
-        this.displayControl(groupEl, module, profile, control, context);
-        if(module.id==="bases"&&control.key==="cardsShape"){
-          this.displayShapeOptions(groupEl,context);this.displayCardShapeTarget(groupEl,context);
-        }
-      }
-      if (module.id === "kanban" && group.name === "Columns") {
-        this.displayColumnOverrides(groupEl, module, profile, context);
-      }
+    const selectedBasics={
+      kanban:["columnBackground","cardBackground","cardRadius","cardSpacing"],
+      "spaced-repetition":["cardBackground","contentColor","contentFontSize","cardRadius"],
+      bases:["cardsShape","tableTextSize","tableRowHeight"]
+    };
+    const basicKeys=new Set(selectedBasics[module.id]||module.controlGroups[0]?.controls.slice(0,4).map(control=>control.key)||[]);
+    const basics=this.createControlGroup(section,"Basics",context,`${module.id}:basics`,true);
+    const more=this.createControlGroup(section,"More settings",context,`${module.id}:more`);
+    for(const group of module.controlGroups) {
+      for(const control of group.controls.filter(control=>basicKeys.has(control.key)))this.displayControl(basics,module,profile,control,context);
+      const remaining=group.controls.filter(control=>!basicKeys.has(control.key));
+      if(!remaining.length&&!(module.id==="kanban"&&group.name==="Columns"))continue;
+      const groupEl=this.createControlGroup(more,group.name,context,`${module.id}:${group.name}`);
+      for(const control of remaining)this.displayControl(groupEl,module,profile,control,context);
+      if(module.id==="kanban"&&group.name==="Columns")this.displayColumnOverrides(groupEl,module,profile,context);
     }
+    if(module.id==="bases"){this.displayShapeOptions(more,context);this.displayCardShapeTarget(more,context);}
 
     const advanced = section.createEl("details", { cls: "cs-subsection" });
     advanced.createEl("summary", { text: "Advanced scoped CSS" });
@@ -742,27 +749,30 @@ class CustomizationSettingTab extends PluginSettingTab {
     const setting = new Setting(containerEl).setName(control.name);
     if (control.desc) setting.setDesc(control.desc);
     else if (control.unit) setting.setDesc(`Current value: ${value}${control.unit}`);
+    let component;
     const update = async(next) => {
       if(control.unit)setting.setDesc(`Current value: ${next}${control.unit}`);
       await this.updateModule(module.id, { [control.key]: next }, context,module.id==="bases"&&control.key==="cardsShape");
     };
     if (control.type === "color") {
-      setting.addColorPicker((picker) => picker.setValue(value).onChange(update));
+      setting.addColorPicker((picker) => {component=picker;return picker.setValue(value).onChange(update);});
     } else if (control.type === "boolean") {
-      setting.addToggle((toggle) => {if(control.key==="useThemeColors"&&context)context.themeColorToggle={id:module.id,toggle};return toggle.setValue(value).onChange(update);});
+      setting.addToggle((toggle) => {component=toggle;if(control.key==="useThemeColors"&&context)context.themeColorToggle={id:module.id,toggle};return toggle.setValue(value).onChange(update);});
     } else if (control.type === "range") {
-      setting.addSlider((slider) => slider
+      setting.addSlider((slider) => {component=slider;return slider
         .setLimits(schema.min, schema.max, schema.step || 1)
         .setValue(value)
         .setDynamicTooltip()
-        .onChange(update));
+        .onChange(update);});
     } else if (control.type === "select") {
       setting.addDropdown((dropdown) => {
+        component=dropdown;
         for (const option of schema.options) dropdown.addOption(option, module.id === "bases" && control.key === "cardsShape" ? CARD_SHAPES[option] : option);
         dropdown.setValue(value).onChange(update);
       });
     } else if (control.type === "text") {
       setting.addText((text) => {
+        component=text;
         text.setPlaceholder("Assets/cover.jpg or https://example.com/cover.jpg").setValue(value);
         text.inputEl.type = "text";
         const change=()=>update(text.getValue().trim());
@@ -770,6 +780,7 @@ class CustomizationSettingTab extends PluginSettingTab {
         text.inputEl.addEventListener("blur",()=>this.flushLiveInput(text.inputEl));
       });
     }
+    this.decorateControl(setting,module.id,control.key,component,context,profile,next=>{if(control.unit)setting.setDesc(`Current value: ${next}${control.unit}`);});
   }
 
   displayColumnOverrides(containerEl, module, profile, context) {
@@ -833,6 +844,7 @@ class CustomizationSettingTab extends PluginSettingTab {
     const selected=this.plugin.profileManager.getActiveProfile();
     if(context?.integrationEnabledToggle){const {id,toggle}=context.integrationEnabledToggle;toggle.setValue(selected.moduleEnabled[id]!==false);}
     if(context?.themeColorToggle){const {id,toggle}=context.themeColorToggle;toggle.setValue(selected.modules[id].useThemeColors);}
+    for(const refresh of context?.overrideIndicators||[])refresh(selected);
     if (!context?.preview) return;
     const profile = this.plugin.profileManager.getActiveProfile();
     context.preview.name.textContent = profile.name;

@@ -81,3 +81,16 @@ test("modal shows once after an update, records the version, and never on a fres
   manual.plugin.showWhatsNew();
   assert.equal(manual.Modal.opened, 1);
 });
+
+
+test("1.4.0 upgrade shows the new entry once and preserves support", () => {
+  const upgrade = pluginWith({ freshInstall: false, lastSeenVersion: "1.3.0", version: "1.4.0" });
+  upgrade.plugin.checkWhatsNew();
+  assert.equal(upgrade.Modal.opened, 1);
+  assert.equal(upgrade.plugin.settingsManager.settings.lastSeenVersion, "1.4.0");
+  upgrade.plugin.checkWhatsNew();
+  assert.equal(upgrade.Modal.opened, 1);
+  assert.match(WHATS_NEW["1.4.0"].summary, /settings layout/);
+  assert.ok(WHATS_NEW["1.4.0"].highlights.some(line => /round/.test(line)));
+  assert.equal(SUPPORT_URL, "https://buymeacoffee.com/medoadel20y");
+});

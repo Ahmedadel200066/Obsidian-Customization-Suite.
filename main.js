@@ -3109,6 +3109,28 @@ var require_presentation_manager = __commonJS({
         value.globalKeys = [];
         this.pm.getProfile(this.plugin.settingsManager.settings.activeProfileId).variables = copy(value.variables);
       }
+      resetControl(scope, key) {
+        const id = this.plugin.settingsManager.settings.activeProfileId;
+        if (!this.pm.customProfiles.some((profile) => profile.id === id)) throw new Error("Duplicate the preset before editing its controls.");
+        const { meta, mode, value } = this.variant(id), base = this.pm.getProfile(id);
+        if (scope === "global") {
+          if (!Object.hasOwn(base.variables, key)) throw new Error("Unknown appearance control.");
+          const restored2 = meta.baseline[mode].variables[key];
+          value.variables[key] = copy(restored2);
+          base.variables[key] = copy(restored2);
+          value.globalKeys = value.globalKeys.filter((item) => item !== key);
+          return restored2;
+        }
+        const module3 = this.pm.modules.find((item) => item.id === scope);
+        if (!module3 || !Object.hasOwn(module3.settingsSchema, key) || key === "cardsShape") throw new Error("Unknown or separately managed integration control.");
+        const restored = meta.baseline[mode].modules[scope][key] ?? module3.defaultSettings[key];
+        value.modules[scope][key] = copy(restored);
+        base.modules[scope][key] = copy(restored);
+        const keys = (value.moduleKeys[scope] || []).filter((item) => item !== key);
+        if (keys.length) value.moduleKeys[scope] = keys;
+        else delete value.moduleKeys[scope];
+        return restored;
+      }
       resetModule(moduleId) {
         const { meta, mode, value } = this.variant(this.plugin.settingsManager.settings.activeProfileId);
         value.modules[moduleId] = copy(meta.baseline?.[mode]?.modules?.[moduleId] || this.pm.modules.find((m) => m.id === moduleId).defaultSettings);
@@ -3228,6 +3250,7 @@ var require_settings_tab = __commonJS({
         context.tabResizeObservers = [];
         containerEl.empty();
         containerEl.addClass("customization-studio-settings");
+        context.overrideIndicators = [];
         context.preview = null;
         context.hasCompactToolbar = true;
         if (context.section === "profiles") context.section = "advanced";
@@ -3358,9 +3381,71 @@ var require_settings_tab = __commonJS({
         }
         context.searchStatus = panel.createEl("p", { cls: "cs-search-status", attr: { role: "status", "aria-live": "polite" } });
         this.filterPage(context);
+        this.animatePanel(context, `${context.section}:${context.moduleId}`);
         const footer = containerEl.createEl("footer", { cls: "cs-settings-footer" });
         footer.createEl("p", { text: "Support via plugin details." });
         containerEl.scrollTop = context.scrollTop;
+      }
+      reducedMotion(context) {
+        return context?.containerEl?.ownerDocument?.defaultView?.matchMedia?.("(prefers-reduced-motion: reduce)").matches === true;
+      }
+      animatePanel(context, key) {
+        if (context.lastPanelKey && context.lastPanelKey !== key && !this.reducedMotion(context)) {
+          context.panel?.animate?.([{ opacity: 0.9, transform: "translateY(4px)" }, { opacity: 1, transform: "translateY(0)" }], { duration: 160, easing: "ease-out" });
+        }
+        context.lastPanelKey = key;
+      }
+      createControlGroup(containerEl, title, context, key, defaultOpen = false) {
+        const group = containerEl.createEl("details", { cls: "cs-subsection" });
+        group.open = context?.groupStates?.[key] ?? defaultOpen;
+        group.createEl("summary", { text: title });
+        group.addEventListener("toggle", () => {
+          if (!context?.searchQuery) {
+            context.groupStates || (context.groupStates = {});
+            context.groupStates[key] = group.open;
+          }
+          if (group.open && !this.reducedMotion(context)) for (const child of [...group.children].slice(1)) child.animate?.([{ opacity: 0.85, transform: "translateY(2px)" }, { opacity: 1, transform: "translateY(0)" }], { duration: 140, easing: "ease-out" });
+        });
+        return group;
+      }
+      decorateControl(setting, scope, key, component, context, initialProfile, onResetValue = () => {
+      }) {
+        if (!this.plugin.presentation || !setting.settingEl || key === "cardsShape") return;
+        setting.settingEl.dataset.csControlScope = scope;
+        setting.settingEl.dataset.csControlKey = key;
+        const info = setting.infoEl || setting.settingEl.querySelector?.(".setting-item-info");
+        const badge = info?.createEl("span", { cls: "cs-control-state", attr: { "aria-live": "polite" } });
+        const reset = setting.controlEl?.createEl("button", { text: "Reset", cls: "cs-control-reset", attr: { type: "button", "aria-label": `Reset ${key} override` } });
+        const refresh = (profile = this.plugin.profileManager.getActiveProfile()) => {
+          const keys = scope === "global" ? profile.studio?.globalKeys : profile.studio?.moduleKeys[scope];
+          const modified = keys?.includes(key) === true;
+          const inherited = profile.studio?.neutral && (scope !== "global" || profile.studio.appearance === "auto");
+          if (badge) {
+            badge.textContent = modified ? "Modified" : inherited ? "Inherited" : "Profile default";
+            badge.dataset.state = modified ? "modified" : "inherited";
+            badge.title = inherited && !modified ? "Native styling is active. The control shows the stored profile baseline, not a live theme readout." : "This value belongs to the current profile variant.";
+          }
+          if (reset) {
+            reset.disabled = !modified;
+            reset.title = inherited ? "Remove only this override and inherit native styling." : "Restore this control to the profile baseline.";
+          }
+        };
+        reset?.addEventListener("click", () => this.runChange(async () => {
+          const restored = this.plugin.presentation.resetControl(scope, key);
+          const pending = this.pendingInputs.get(component?.inputEl);
+          if (pending) {
+            clearTimeout(pending.timer);
+            this.pendingInputs.delete(component.inputEl);
+          }
+          component?.setValue(restored);
+          onResetValue(restored);
+          (component?.colorPickerEl || component?.sliderEl || component?.selectEl || component?.toggleEl || component?.inputEl)?.focus?.();
+          this.plugin.applyCustomization();
+          this.refreshProfilePreview(context);
+          await this.persistChange(context, true);
+        }));
+        (context.overrideIndicators || (context.overrideIndicators = [])).push(refresh);
+        refresh(initialProfile);
       }
       filterPage(context) {
         const panel = context.panel;
@@ -3642,73 +3727,42 @@ var require_settings_tab = __commonJS({
           section.createEl("p", { text: "Duplicate the active built-in profile to edit its settings." });
           return;
         }
-        if (profile.studio?.neutral) section.createEl("p", { text: "Native styling is inherited until you change a control. These colors are captured from the current theme; this is not a replacement for your theme or CSS snippets." });
-        this.addColorControl(
-          section,
-          "Accent color",
-          profile.variables.accentColor,
-          (value) => this.updateProfile({ variables: { accentColor: value } }, context)
-        );
-        this.addColorControl(
-          section,
-          "Surface color",
-          profile.variables.surfaceColor,
-          (value) => this.updateProfile({ variables: { surfaceColor: value } }, context)
-        );
-        this.addColorControl(
-          section,
-          "Text color",
-          profile.variables.textColor,
-          (value) => this.updateProfile({ variables: { textColor: value } }, context)
-        );
-        new Setting(section).setName("Tab bar background opacity").setDesc("Affects the tab header container background only; labels and icons stay fully opaque.").addSlider((slider) => slider.setLimits(0, 100, 1).setValue(profile.variables.tabBarOpacity).setDynamicTooltip().onChange((value) => this.updateProfile({ variables: { tabBarOpacity: value } }, context)));
-        new Setting(section).setName("Tab bar backdrop blur").setDesc("Uses backdrop-filter where supported. Blur shows through translucent backgrounds; zero disables it.").addSlider((slider) => slider.setLimits(0, 24, 1).setValue(profile.variables.tabBarBlur).setDynamicTooltip().onChange((value) => this.updateProfile({ variables: { tabBarBlur: value } }, context)));
-        this.addColorControl(
-          section,
-          "Tab bar gradient color",
-          profile.variables.tabBarGradientColor,
-          (value) => this.updateProfile({ variables: { tabBarGradientColor: value } }, context)
-        );
-        new Setting(section).setName("Tab bar gradient type").setDesc("Choose linear, elliptical radial, or circular radial gradient.").addDropdown((dropdown) => {
-          dropdown.addOption("linear", "Linear");
-          dropdown.addOption("radial", "Radial");
-          dropdown.addOption("circle", "Circular radial");
-          dropdown.setValue(profile.variables.tabBarGradientType).onChange((value) => this.updateProfile({ variables: { tabBarGradientType: value } }, context));
-        });
-        new Setting(section).setName("Tab bar gradient direction").setDesc("Direction is used by linear gradients.").addDropdown((dropdown) => {
-          for (const direction of [
-            "to right",
-            "to left",
-            "to bottom",
-            "to top",
-            "to bottom right",
-            "to bottom left",
-            "to top right",
-            "to top left"
-          ]) dropdown.addOption(direction, direction);
-          dropdown.setValue(profile.variables.tabBarGradientDirection).onChange((value) => this.updateProfile({
-            variables: { tabBarGradientDirection: value }
-          }, context));
-        });
-        new Setting(section).setName("Tab bar radial gradient position").setDesc("Position is used by radial and circular radial gradients.").addDropdown((dropdown) => {
-          for (const position of [
-            "center",
-            "top",
-            "bottom",
-            "left",
-            "right",
-            "top left",
-            "top right",
-            "bottom left",
-            "bottom right"
-          ]) dropdown.addOption(position, position);
-          dropdown.setValue(profile.variables.tabBarGradientPosition).onChange((value) => this.updateProfile({
-            variables: { tabBarGradientPosition: value }
-          }, context));
-        });
-        new Setting(section).setName("Tab bar gradient intensity").setDesc("Set the gradient opacity. Zero disables the gradient.").addSlider((slider) => slider.setLimits(0, 100, 1).setValue(profile.variables.tabBarGradientIntensity).setDynamicTooltip().onChange((value) => this.updateProfile({
-          variables: { tabBarGradientIntensity: value }
-        }, context)));
+        new Setting(section).setName("Appearance").setHeading();
+        section.createEl("p", { cls: "cs-section-description", text: "Make it yours. Reset removes one override without changing your other settings." });
+        const basics = this.createControlGroup(section, "Colors", context, "global:colors", true);
+        const more = this.createControlGroup(section, "Tab bar details", context, "global:tabs");
+        const controls = [
+          { key: "accentColor", name: "Accent color", type: "color" },
+          { key: "surfaceColor", name: "Surface color", type: "color" },
+          { key: "textColor", name: "Text color", type: "color" },
+          { key: "tabBarOpacity", name: "Tab bar background opacity", type: "range", min: 0, max: 100, desc: "Tab header background only. Labels and icons stay fully opaque." },
+          { key: "tabBarBlur", name: "Tab bar backdrop blur", type: "range", min: 0, max: 24, desc: "Visible through a translucent tab bar. Zero disables blur." },
+          { key: "tabBarGradientColor", name: "Tab bar gradient color", type: "color" },
+          { key: "tabBarGradientType", name: "Tab bar gradient type", options: ["linear", "radial", "circle"] },
+          { key: "tabBarGradientDirection", name: "Tab bar gradient direction", options: ["to right", "to left", "to bottom", "to top", "to bottom right", "to bottom left", "to top right", "to top left"] },
+          { key: "tabBarGradientPosition", name: "Tab bar radial gradient position", options: ["center", "top", "bottom", "left", "right", "top left", "top right", "bottom left", "bottom right"] },
+          { key: "tabBarGradientIntensity", name: "Tab bar gradient intensity", type: "range", min: 0, max: 100, desc: "Zero disables the gradient." }
+        ];
+        for (const control of controls) {
+          const setting = new Setting(control.key.startsWith("tabBar") ? more : basics).setName(control.name);
+          if (control.desc) setting.setDesc(control.desc);
+          let component;
+          const update = (value) => this.updateProfile({ variables: { [control.key]: value } }, context);
+          if (control.type === "color") setting.addColorPicker((picker) => {
+            component = picker;
+            picker.setValue(profile.variables[control.key]).onChange(update);
+          });
+          else if (control.type === "range") setting.addSlider((slider) => {
+            component = slider;
+            slider.setLimits(control.min, control.max, 1).setValue(profile.variables[control.key]).setDynamicTooltip().onChange(update);
+          });
+          else setting.addDropdown((dropdown) => {
+            component = dropdown;
+            for (const option of control.options) dropdown.addOption(option, option);
+            dropdown.setValue(profile.variables[control.key]).onChange(update);
+          });
+          this.decorateControl(setting, "global", control.key, component, context, profile);
+        }
         new Setting(section).setName("Reset global appearance").setDesc("Returns global controls to the captured Default baseline without imposing a preset.").addButton((button) => button.setButtonText("Reset").onClick(() => this.plugin.presentation ? this.runChange(async () => {
           this.plugin.presentation.resetGlobal();
           this.plugin.applyCustomization();
@@ -3813,15 +3867,15 @@ var require_settings_tab = __commonJS({
         const section = containerEl.createEl("div", { cls: "cs-module-section" });
         new Setting(section).setName(module3.name).setHeading();
         section.createEl("p", {
-          text: detected ? "Target detected. Styling applies when a matching view is open." : module3.target.type === "core" ? "Obsidian Core Plugin is not enabled or its API is unavailable." : "Community plugin is not enabled."
+          text: detected ? "Detected. Styling applies to open views." : module3.target.type === "core" ? "Obsidian Core Plugin is not enabled or its API is unavailable." : "Community plugin is not enabled."
         });
         if (context) {
           context.themeColorToggle = null;
           context.integrationEnabledToggle = null;
         }
-        if (profile.studio?.neutral) section.createEl("p", { text: "Untouched controls inherit native styling. Changing a control enables this integration and overrides only that control, not a preset palette." });
+        section.createEl("p", { cls: "cs-section-description", text: "Inherited controls keep native styling. Modify a control to override it." });
         if (module3.compatibilityNote) section.createEl("p", { cls: "cs-compatibility-note", text: module3.compatibilityNote });
-        new Setting(section).setName("Enable customization").setDesc("Turning this off removes this integration's effects. Changing a control enables it again; master pause still wins.").addToggle((toggle) => {
+        new Setting(section).setName("Enable customization").setDesc("Edits enable this integration automatically. Master pause still applies.").addToggle((toggle) => {
           if (context) context.integrationEnabledToggle = { id: module3.id, toggle };
           return toggle.setValue(profile.moduleEnabled[module3.id] !== false).onChange((value) => this.runChange(async () => {
             this.plugin.profileManager.setModuleEnabled(module3.id, value);
@@ -3829,19 +3883,25 @@ var require_settings_tab = __commonJS({
             this.refreshProfilePreview(context);
           }));
         });
+        const selectedBasics = {
+          kanban: ["columnBackground", "cardBackground", "cardRadius", "cardSpacing"],
+          "spaced-repetition": ["cardBackground", "contentColor", "contentFontSize", "cardRadius"],
+          bases: ["cardsShape", "tableTextSize", "tableRowHeight"]
+        };
+        const basicKeys = new Set(selectedBasics[module3.id] || module3.controlGroups[0]?.controls.slice(0, 4).map((control) => control.key) || []);
+        const basics = this.createControlGroup(section, "Basics", context, `${module3.id}:basics`, true);
+        const more = this.createControlGroup(section, "More settings", context, `${module3.id}:more`);
         for (const group of module3.controlGroups) {
-          const groupEl = section.createEl("details", { cls: "cs-subsection", attr: { open: true } });
-          groupEl.createEl("summary", { text: group.name });
-          for (const control of group.controls) {
-            this.displayControl(groupEl, module3, profile, control, context);
-            if (module3.id === "bases" && control.key === "cardsShape") {
-              this.displayShapeOptions(groupEl, context);
-              this.displayCardShapeTarget(groupEl, context);
-            }
-          }
-          if (module3.id === "kanban" && group.name === "Columns") {
-            this.displayColumnOverrides(groupEl, module3, profile, context);
-          }
+          for (const control of group.controls.filter((control2) => basicKeys.has(control2.key))) this.displayControl(basics, module3, profile, control, context);
+          const remaining = group.controls.filter((control) => !basicKeys.has(control.key));
+          if (!remaining.length && !(module3.id === "kanban" && group.name === "Columns")) continue;
+          const groupEl = this.createControlGroup(more, group.name, context, `${module3.id}:${group.name}`);
+          for (const control of remaining) this.displayControl(groupEl, module3, profile, control, context);
+          if (module3.id === "kanban" && group.name === "Columns") this.displayColumnOverrides(groupEl, module3, profile, context);
+        }
+        if (module3.id === "bases") {
+          this.displayShapeOptions(more, context);
+          this.displayCardShapeTarget(more, context);
         }
         const advanced = section.createEl("details", { cls: "cs-subsection" });
         advanced.createEl("summary", { text: "Advanced scoped CSS" });
@@ -3914,26 +3974,36 @@ var require_settings_tab = __commonJS({
         const setting = new Setting(containerEl).setName(control.name);
         if (control.desc) setting.setDesc(control.desc);
         else if (control.unit) setting.setDesc(`Current value: ${value}${control.unit}`);
+        let component;
         const update = async (next) => {
           if (control.unit) setting.setDesc(`Current value: ${next}${control.unit}`);
           await this.updateModule(module3.id, { [control.key]: next }, context, module3.id === "bases" && control.key === "cardsShape");
         };
         if (control.type === "color") {
-          setting.addColorPicker((picker) => picker.setValue(value).onChange(update));
+          setting.addColorPicker((picker) => {
+            component = picker;
+            return picker.setValue(value).onChange(update);
+          });
         } else if (control.type === "boolean") {
           setting.addToggle((toggle) => {
+            component = toggle;
             if (control.key === "useThemeColors" && context) context.themeColorToggle = { id: module3.id, toggle };
             return toggle.setValue(value).onChange(update);
           });
         } else if (control.type === "range") {
-          setting.addSlider((slider) => slider.setLimits(schema.min, schema.max, schema.step || 1).setValue(value).setDynamicTooltip().onChange(update));
+          setting.addSlider((slider) => {
+            component = slider;
+            return slider.setLimits(schema.min, schema.max, schema.step || 1).setValue(value).setDynamicTooltip().onChange(update);
+          });
         } else if (control.type === "select") {
           setting.addDropdown((dropdown) => {
+            component = dropdown;
             for (const option of schema.options) dropdown.addOption(option, module3.id === "bases" && control.key === "cardsShape" ? CARD_SHAPES[option] : option);
             dropdown.setValue(value).onChange(update);
           });
         } else if (control.type === "text") {
           setting.addText((text) => {
+            component = text;
             text.setPlaceholder("Assets/cover.jpg or https://example.com/cover.jpg").setValue(value);
             text.inputEl.type = "text";
             const change = () => update(text.getValue().trim());
@@ -3941,6 +4011,9 @@ var require_settings_tab = __commonJS({
             text.inputEl.addEventListener("blur", () => this.flushLiveInput(text.inputEl));
           });
         }
+        this.decorateControl(setting, module3.id, control.key, component, context, profile, (next) => {
+          if (control.unit) setting.setDesc(`Current value: ${next}${control.unit}`);
+        });
       }
       displayColumnOverrides(containerEl, module3, profile, context) {
         const names = this.plugin.moduleManager.getDetectedColumns(module3.id);
@@ -3993,6 +4066,7 @@ var require_settings_tab = __commonJS({
           const { id, toggle } = context.themeColorToggle;
           toggle.setValue(selected.modules[id].useThemeColors);
         }
+        for (const refresh of context?.overrideIndicators || []) refresh(selected);
         if (!context?.preview) return;
         const profile = this.plugin.profileManager.getActiveProfile();
         context.preview.name.textContent = profile.name;
@@ -4083,6 +4157,17 @@ var require_whats_new = __commonJS({
   "core/whats-new.js"(exports2, module2) {
     var SUPPORT_URL = "https://buymeacoffee.com/medoadel20y";
     var WHATS_NEW = {
+      "1.4.0": {
+        summary: "A clearer settings layout, easier control resets, and fixes for Kanban styling and saving.",
+        highlights: [
+          "Find controls under Appearance, Plugins, and Advanced, with a sticky toolbar and search for the current page.",
+          "Start with Basics and open More settings when needed. Inherited and Modified labels show which standard controls you changed, with individual Reset buttons.",
+          "Enjoy cleaner spacing, keyboard focus, and subtle motion that respects reduced-motion preferences.",
+          "Settings use the available width, including maximized windows, and color swatches stay round when resizing.",
+          "Kanban color and opacity changes now apply correctly from a neutral profile.",
+          "Save settings without destination-file collisions, with recovery for valid interrupted-save journals."
+        ]
+      },
       "1.3.0": {
         summary: "A version-aware What's new dialog and more reliable scrolling in the ribbon settings modal.",
         highlights: [

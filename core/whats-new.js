@@ -2,6 +2,17 @@ const SUPPORT_URL = "https://buymeacoffee.com/medoadel20y";
 
 // One entry per released version. Add an entry when a version ships; a version without an entry updates silently.
 const WHATS_NEW = {
+  "1.4.0": {
+    summary: "A clearer settings layout, easier control resets, and fixes for Kanban styling and saving.",
+    highlights: [
+      "Find controls under Appearance, Plugins, and Advanced, with a sticky toolbar and search for the current page.",
+      "Start with Basics and open More settings when needed. Inherited and Modified labels show which standard controls you changed, with individual Reset buttons.",
+      "Enjoy cleaner spacing, keyboard focus, and subtle motion that respects reduced-motion preferences.",
+      "Settings use the available width, including maximized windows, and color swatches stay round when resizing.",
+      "Kanban color and opacity changes now apply correctly from a neutral profile.",
+      "Save settings without destination-file collisions, with recovery for valid interrupted-save journals."
+    ]
+  },
   "1.3.0": {
     summary: "A version-aware What's new dialog and more reliable scrolling in the ribbon settings modal.",
     highlights: [

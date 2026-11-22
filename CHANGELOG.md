@@ -1,5 +1,28 @@
 # Changelog
 
+## 1.4.0
+
+### Added
+
+- Compact sticky toolbar, Appearance / Plugins / Advanced navigation, responsive page/plugin dropdowns, and current-page search.
+- Basics/details grouping with search-aware group restoration.
+- Inherited / Modified labels and per-control Reset for standard global and plugin controls, with Profile default labels for preset or forced palettes where appropriate.
+- Updated in-app release notes, with the optional Buy Me a Coffee support button retained.
+
+### Changed
+
+- Refined spacing, typography, hover and keyboard-focus states.
+- Subtle panel, group and navigation motion respects reduced-motion preferences.
+
+### Fixed
+
+- Settings content collapsing into a narrow column in enlarged windows because native centering padding consumed the capped page width.
+- Color swatches becoming oval: both the input and the native inner swatch now keep square dimensions.
+- Neutral-profile Kanban color and opacity changes dropping their CSS-variable consumers.
+- Destination-file collisions during sidecar saves. Atomic processing or overwrite-capable writes replace rename-to-existing operations.
+- Recovery of valid interrupted-save journals, while preserving unrelated or corrupt data and backups.
+- Retained ribbon modal scroll protection.
+
 ## 1.3.0
 
 ### Added
@@ -37,18 +60,6 @@
 - Repeating "EEXIST: file already exists" notice when saving `studio-appearance.json.bak`; a failed backup no longer blocks saving.
 
 ## Unreleased
-
-### Post-1.3.0 changes on main
-
-- Keep CSS-variable consumers when a neutral profile overrides Kanban card color or opacity.
-- Remove duplicate modal max-height declarations and stylesheet important rules while retaining runtime scroll protection.
-- Add the phase-one compact sticky toolbar and Appearance / Plugins / Advanced layout, with responsive page/plugin dropdowns and current-page search.
-- Preserve profile tools under Advanced and retain keyboard navigation.
-- Replace rename-to-existing sidecar saves with atomic processing when available and overwrite-capable writes otherwise.
-- Recover valid pending-save journals from interrupted saves or the older destination-exists error, while preserving existing settings and backups.
-- Add regression coverage for save collisions, journal recovery, inherited variable consumers, and search state.
-
-These changes do not alter the published 1.3.0 release assets. Basics/details grouping and per-control Inherited/Modified resets are not included in this phase.
 
 ### Earlier development notes
 
