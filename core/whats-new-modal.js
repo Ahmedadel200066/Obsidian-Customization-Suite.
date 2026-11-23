@@ -25,28 +25,24 @@ class WhatsNewModal extends Modal {
     const support = content.createEl("div", { cls: "cs-whatsnew-support" });
     support.createEl("p", { text: "If Customization Studio is useful to you, you can support its development. It is optional, and every feature stays free." });
     const coffee = support.createEl("a", {
-      cls: "cs-bmc-button",
-      attr: { href: SUPPORT_URL, target: "_blank", rel: "noopener", "aria-label": "Buy me a coffee (opens Buy Me a Coffee)" }
+      cls: "cs-support-button",
+      attr: { href: SUPPORT_URL, target: "_blank", rel: "noopener", "aria-label": "Support on Ko-fi (opens Ko-fi)" }
     });
+    // Build the bundled official logo as SVG nodes, with no remote image request.
     const svgNs = "http://www.w3.org/2000/svg";
-    const doc = coffee.ownerDocument;
-    const svg = doc.createElementNS(svgNs, "svg");
-    svg.setAttribute("viewBox", "0 0 24 24");
-    svg.setAttribute("width", "20");
-    svg.setAttribute("height", "20");
+    const buildLogo = ([tag, attributes, text, children]) => {
+      const node = coffee.ownerDocument.createElementNS(svgNs, tag);
+      for (const [name, value] of Object.entries(attributes)) node.setAttribute(name, value);
+      if (text) node.textContent = text;
+      for (const child of children) node.appendChild(buildLogo(child));
+      return node;
+    };
+    const svg = buildLogo(require("./kofi-logo"));
+    svg.setAttribute("width", "76");
+    svg.setAttribute("height", "30");
     svg.setAttribute("aria-hidden", "true");
-    for (const [tag, attrs] of [
-      ["path", { d: "M5 8h12v5a5 5 0 0 1-5 5h-2a5 5 0 0 1-5-5z", fill: "#fff", stroke: "#0d0c22", "stroke-width": "1.8", "stroke-linejoin": "round" }],
-      ["path", { d: "M17 9h1.5a2.5 2.5 0 0 1 0 5H16.6", fill: "none", stroke: "#0d0c22", "stroke-width": "1.8", "stroke-linecap": "round" }],
-      ["path", { d: "M4 20.5h14", fill: "none", stroke: "#0d0c22", "stroke-width": "1.8", "stroke-linecap": "round" }],
-      ["path", { d: "M9 3.5c-.8 1 .8 1.5 0 2.5M13 3.5c-.8 1 .8 1.5 0 2.5", fill: "none", stroke: "#0d0c22", "stroke-width": "1.5", "stroke-linecap": "round" }]
-    ]) {
-      const node = doc.createElementNS(svgNs, tag);
-      for (const [name, value] of Object.entries(attrs)) node.setAttribute(name, value);
-      svg.appendChild(node);
-    }
     coffee.appendChild(svg);
-    coffee.createEl("span", { text: "Buy me a coffee" });
+    coffee.createEl("span", { text: "Support on Ko-fi" });
     const footer = content.createEl("div", { cls: "cs-whatsnew-footer" });
     const label = footer.createEl("label", { cls: "cs-whatsnew-optout" });
     const box = label.createEl("input", { attr: { type: "checkbox" } });

@@ -1,3 +1,5 @@
+> Repository support link: [Support on Ko-fi](https://ko-fi.com/ahmedadel23545). This link change has not been released.
+
 # Customization Studio 1.4.0
 
 ## What's new
@@ -22,4 +24,4 @@ Download **main.js**, **manifest.json**, and **styles.css** from this release an
 
 Minimum supported Obsidian version: **1.9.0**. Existing profiles and appearance settings are preserved. Do not delete settings, backups, or pending-save journals to update.
 
-Support development, optionally: https://buymeacoffee.com/medoadel20y
+Support development, optionally: https://ko-fi.com/ahmedadel23545

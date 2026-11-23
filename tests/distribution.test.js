@@ -20,10 +20,10 @@ test("release bundle is standalone except for the Obsidian host API and preserve
 
 test("support uses the owner-approved destination in manifest and README, not a settings donation button", () => {
   const manifest = JSON.parse(read("manifest.json"));
-  assert.equal(manifest.fundingUrl, "https://buymeacoffee.com/medoadel20y");
+  assert.equal(manifest.fundingUrl, "https://ko-fi.com/ahmedadel23545");
   assert.ok(read("README.md").includes(manifest.fundingUrl));
   assert.ok(read("core/settings-tab.js").includes("Support via plugin details."));
-  assert.equal(read("core/settings-tab.js").includes("buymeacoffee.com"), false);
+  assert.equal(read("core/settings-tab.js").includes("ko-fi.com"), false);
 });
 
 test("release workflow attaches only the three standard assets", () => {

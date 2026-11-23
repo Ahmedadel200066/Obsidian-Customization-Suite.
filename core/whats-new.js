@@ -1,4 +1,4 @@
-const SUPPORT_URL = "https://buymeacoffee.com/medoadel20y";
+const SUPPORT_URL = "https://ko-fi.com/ahmedadel23545";
 
 // One entry per released version. Add an entry when a version ships; a version without an entry updates silently.
 const WHATS_NEW = {
@@ -18,7 +18,7 @@ const WHATS_NEW = {
     highlights: [
       "See release highlights after an update, with no automatic dialog on a fresh install.",
       "Reopen these notes from the Show what's new command or settings button.",
-      "Support development through the centered Buy Me a Coffee button.",
+      "Support development through the optional support button.",
       "Ribbon settings now keep their scroll area within the viewport, including when an older stylesheet is installed.",
       "Scroll bounds adapt when the window or mobile viewport changes."
     ]

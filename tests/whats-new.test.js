@@ -92,5 +92,16 @@ test("1.4.0 upgrade shows the new entry once and preserves support", () => {
   assert.equal(upgrade.Modal.opened, 1);
   assert.match(WHATS_NEW["1.4.0"].summary, /settings layout/);
   assert.ok(WHATS_NEW["1.4.0"].highlights.some(line => /round/.test(line)));
-  assert.equal(SUPPORT_URL, "https://buymeacoffee.com/medoadel20y");
+  assert.equal(SUPPORT_URL, "https://ko-fi.com/ahmedadel23545");
+});
+
+
+test("Ko-fi support is consistent across funding configuration and the bundled icon", () => {
+  const root = path.join(__dirname, "..");
+  assert.equal(fs.readFileSync(path.join(root, ".github/FUNDING.yml"), "utf8").trim(), "ko_fi: ahmedadel23545");
+  const modal = fs.readFileSync(path.join(root, "core/whats-new-modal.js"), "utf8");
+  assert.match(modal, /Support on Ko-fi/);
+  assert.match(modal, /require\("\.\/kofi-logo"\)/);
+  assert.doesNotMatch(modal, /https?:\/\/.*\.(?:png|svg)/);
+  assert.ok(require("../core/kofi-logo")[0] === "svg");
 });

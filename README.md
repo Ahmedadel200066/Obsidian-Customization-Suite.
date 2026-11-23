@@ -8,7 +8,7 @@ Customization Studio is a non-invasive Obsidian plugin for personalizing the
 appearance of Kanban, Spaced Repetition, Obsidian Bases, Tasks, Dataview,
 Calendar, and Day Planner. It keeps module
 logic separate, applies plugin-owned styles, and stores customization profiles
-through Obsidian's plugin data API. It does not edit target plugin sources,
+in the plugin folder. It does not edit target plugin sources,
 settings, review schedules, Base definitions, or user content.
 
 **Author:** [Ahmed Adel](https://github.com/Ahmedadel200066)
@@ -21,9 +21,11 @@ Screenshots are not available yet.
 
 <!-- Add verified screenshots here after capturing them in Obsidian. -->
 
-## Development status
+## Updates
 
-The `main` branch contains fixes and the first settings-layout update after 1.3.0. These changes are not a new release and do not replace the published 1.3.0 downloads. Use the release page for the published build.
+Use the published release assets for updates. The `main` branch may contain
+changes that have not been released yet. No new release is created by a README
+or support-link update.
 
 ## Features
 
@@ -51,9 +53,15 @@ The `main` branch contains fixes and the first settings-layout update after 1.3.
   independently for the Community Plugins settings tab and ribbon modal.
 - The active profile name and status are visible across sections and settings
   surfaces; profile switching updates all open views immediately.
-- Organized visual settings with color pickers, sliders, toggles, dropdowns,
-  collapsible groups, active-profile color previews, live preview, and automatic
-  persistence.
+- Basics and More settings groups keep less-used controls out of the way.
+- Standard controls show Inherited or Modified, with an individual Reset button.
+  Presets and forced palettes use Profile default where appropriate. Inherited
+  refers to the stored profile baseline, not a live measurement of theme CSS.
+  Shape options and raw CSS keep their own reset/editing tools.
+- Color pickers, sliders, toggles, dropdowns, and automatic saving. Color swatches
+  stay round when resizing, and enlarged Settings windows keep a readable width.
+- Subtle panel and group motion respects reduced-motion preferences; keyboard
+  focus and hover states stay visible.
 - A ribbon shortcut opens the visual settings in a plugin-owned modal with viewport-bounded scrolling.
 - A version-aware What's new dialog explains updates once, stays silent on fresh installs, and can be reopened from settings or the command palette.
 - Independent module enablement and settings for each supported integration.
@@ -68,7 +76,7 @@ The `main` branch contains fixes and the first settings-layout update after 1.3.
 Customization Studio has no required account, paid feature, analytics service,
 or backend. Its runtime code does not upload notes or task content. Profiles,
 visual settings, and custom CSS are stored locally through Obsidian's plugin
-data API. Exporting a profile copies its settings and CSS to your clipboard;
+data API and a local appearance file. Exporting a profile copies its settings and CSS to your clipboard;
 review them before sharing, as they may include vault-relative paths or URLs.
 
 Network requests are optional and depend on what you configure:
@@ -82,7 +90,7 @@ Network requests are optional and depend on what you configure:
   and scopes selectors, but does not block resource URLs. Selector scoping
   is not a security sandbox. Imported profiles can contain CSS and image
   URLs, so only import profiles or paste CSS from sources you trust.
-- Opening the optional Buy Me a Coffee support link visits that service in
+- Opening the optional Ko-fi support link visits that service in
   your browser. It is not needed to use the plugin.
 
 The runtime reads its own stylesheet in Obsidian's configuration folder and
@@ -155,8 +163,8 @@ colors, native active borders, and drag/resize handlers are not changed.
 Source-inspected at Day Planner 0.35.1, commit `9c483b3`.
 
 The four new integrations are **off by default**, including when older
-profiles load. Duplicate a built-in profile, open **Integrations**, select
-the target, and enable customization. Their colors follow the active theme
+profiles load. Create an editable profile or duplicate a built-in preset, open
+**Plugins**, select the target, and enable customization. Their colors follow the active theme
 by default; turn off **Follow theme colors** to apply custom colors. All four
 support independent settings, module-scoped CSS, profile import/export, and
 cleanup on disable/unload. These source checks do not certify live-vault
@@ -168,14 +176,23 @@ behavior; the four installed target plugins still need real in-app tests.
 
 1. Download `main.js`, `manifest.json`, and `styles.css` from the same published
    release. Put them directly into `<vault>/.obsidian/plugins/customization-studio/`.
-2. Keep your existing `data.json` if updating, then reload Obsidian and enable
-   **Customization Studio** under Community plugins.
+2. Keep `data.json`, `studio-appearance.json`, and any matching backups or
+   pending-save journals. Replace only the three plugin assets, then reload
+   Obsidian or disable and re-enable **Customization Studio**.
 
-For releases after the original 0.1.0, only the three standard assets are
-attached. The original 0.1.0 also has an installable ZIP and LICENSE; those
-published files are left unchanged. Do not install GitHub's automatic
-source-code archive as if it were the runtime package. The MIT license remains
-in the repository and its full notice is included in `main.js`.
+Back up the plugin settings before a major update. Profiles, the active profile,
+and separate Light/Dark values survive a normal update. The appearance file is
+part of your saved settings, not a disposable build file. The normal profile
+export includes both variants and shape settings; Legacy export does not.
+
+When upgrading from builds that predate the Light/Dark appearance file, saved
+profiles remain available, but the first migration selects a new neutral Default
+and generates variant colors. Select your old profile again and check its colors.
+This older migration does not guarantee an identical appearance.
+
+Use the three standard release assets, not GitHub's automatic source-code
+archive. The MIT license remains in the repository and its notice is included
+in `main.js`.
 
 ### Install with BRAT
 
@@ -256,10 +273,10 @@ as additional release files.
 - Profile recommendations are not implemented: the inspected source contains
   no recommendation rules or theme detection, so the UI states that
   suggestions are unavailable rather than inferring a profile.
-- Support uses the standard manifest `fundingUrl` link. There is no direct
-  donation button in the plugin settings. No integration context-menu action
-  is registered because no
-  stable, verified menu hook for the supported plugin views was found.
+- Support is optional through the standard manifest `fundingUrl` link and the
+  Ko-fi button in the What's new dialog. No integration context-menu action
+  is registered because no stable, verified menu hook for the supported plugin
+  views was found.
 - Column blur uses a translucent lane surface (capped at 75% effective opacity
   while blur is active) so the backdrop can be visible; the exact appearance
   depends on what is behind the Kanban lane.
@@ -303,13 +320,13 @@ See [bug-fix verification](BUGFIX_VERIFICATION.md), [growth-change verification]
 
 These checks remain necessary before claiming runtime compatibility:
 
-1. Install the root plugin files or release ZIP into
-   `.obsidian/plugins/customization-studio/`, enable the plugin, and confirm the
-   ribbon shortcut opens the settings tab.
+1. Install the three plugin assets into `.obsidian/plugins/customization-studio/`,
+   enable the plugin, and confirm the ribbon shortcut opens the settings modal.
 2. Switch profiles, change global and module controls, restart Obsidian, and
    confirm settings and active profile persist.
-3. Reset global appearance and confirm tab-bar opacity/gradient controls and
-   live preview return to their Minimal values.
+3. Reset an individual control and confirm only that control returns to the
+   current variant baseline. Check Light/Dark separately and verify the other
+   profile and sibling controls remain unchanged.
 4. On a Kanban 2.0.51 board, use two uniquely named columns with different
    manual colors; reorder columns and create a new lane.
 5. Test a local vault image and a reachable HTTPS image as board backgrounds;
@@ -319,6 +336,10 @@ These checks remain necessary before claiming runtime compatibility:
    `prefers-reduced-motion` enabled.
 7. Test Spaced Repetition controls in a real review and Bases controls in both
    table and cards views, including module disable and plugin unload cleanup.
+8. Test Tasks, Dataview, Calendar, and Day Planner in their real views. Verify
+   their native actions still work after changing styles and disabling modules.
+9. Resize normal and maximized Settings windows. Check navigation, search,
+   scrolling, circular color swatches, Reset, and reduced-motion behavior.
 
 ## Author
 
@@ -326,9 +347,13 @@ These checks remain necessary before claiming runtime compatibility:
 
 ## Support
 
+<a href="https://ko-fi.com/ahmedadel23545"><img src="assets/kofi-logo.svg" alt="Ko-fi" width="101" height="40"></a>
+
+
 If Customization Studio helps you, you can
-[support Ahmed on Buy Me a Coffee](https://buymeacoffee.com/medoadel20y).
-The same destination is available through the plugin details support link.
+[support Ahmed on Ko-fi](https://ko-fi.com/ahmedadel23545).
+The same destination is available through the plugin details support link,
+the What's new dialog, and GitHub's Sponsor button.
 
 ## Upstream references
 
@@ -337,3 +362,16 @@ The same destination is available through the plugin details support link.
 - [Spaced Repetition](https://github.com/st3v3nmw/obsidian-spaced-repetition),
   inspected version 1.15.4.
 - [Obsidian Bases CSS variables](https://github.com/obsidianmd/obsidian-developer-docs/blob/1c26772ac13d6e9870c865936d389fdfe694e742/en/Reference/CSS%20variables/Editor/Bases.md).
+
+- [Tasks](https://github.com/obsidian-tasks-group/obsidian-tasks), source-inspected
+  for query rows, group headings, metadata chips, and edit-form spacing.
+- [Dataview](https://github.com/blacksmithgu/obsidian-dataview), source-inspected
+  for standard tables, lists, and inline fields.
+- [Calendar](https://github.com/liamcain/obsidian-calendar-plugin), using its
+  documented calendar CSS variables.
+- [Day Planner](https://github.com/ivan-lednev/obsidian-day-planner), source-inspected
+  for timeline and time-block styling without changing scheduling geometry.
+
+The integration sections above record the inspected upstream versions and limits.
+Upstream changes may require selector updates; these references are not a promise
+of compatibility with every upstream release.

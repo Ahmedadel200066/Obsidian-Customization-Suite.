@@ -291,13 +291,13 @@
   color: var(--text-muted);
 }
 
-.customization-studio-whatsnew .cs-bmc-button {
+.customization-studio-whatsnew .cs-support-button {
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
   padding: 0.55rem 1.1rem;
   border-radius: 8px;
-  background: #ffdd00;
+  background: #ffffff;
   color: #0d0c22;
   font-weight: 600;
   font-size: var(--font-ui-medium);
@@ -305,9 +305,9 @@
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
 }
 
-.customization-studio-whatsnew .cs-bmc-button:hover,
-.customization-studio-whatsnew .cs-bmc-button:focus-visible {
-  background: #ffe84d;
+.customization-studio-whatsnew .cs-support-button:hover,
+.customization-studio-whatsnew .cs-support-button:focus-visible {
+  background: #f0faff;
   color: #0d0c22;
   text-decoration: none;
 }
@@ -561,3 +561,5 @@
   border: 0;
   border-radius: 50%;
 }
+
+.customization-studio-whatsnew .cs-support-button svg { flex: 0 0 76px; width: 76px; height: 30px; }

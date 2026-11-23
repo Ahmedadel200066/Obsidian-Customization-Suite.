@@ -4155,7 +4155,7 @@ var require_settings_modal = __commonJS({
 // core/whats-new.js
 var require_whats_new = __commonJS({
   "core/whats-new.js"(exports2, module2) {
-    var SUPPORT_URL = "https://buymeacoffee.com/medoadel20y";
+    var SUPPORT_URL = "https://ko-fi.com/ahmedadel23545";
     var WHATS_NEW = {
       "1.4.0": {
         summary: "A clearer settings layout, easier control resets, and fixes for Kanban styling and saving.",
@@ -4173,7 +4173,7 @@ var require_whats_new = __commonJS({
         highlights: [
           "See release highlights after an update, with no automatic dialog on a fresh install.",
           "Reopen these notes from the Show what's new command or settings button.",
-          "Support development through the centered Buy Me a Coffee button.",
+          "Support development through the optional support button.",
           "Ribbon settings now keep their scroll area within the viewport, including when an older stylesheet is installed.",
           "Scroll bounds adapt when the window or mobile viewport changes."
         ]
@@ -4211,6 +4211,13 @@ var require_whats_new = __commonJS({
   }
 });
 
+// core/kofi-logo.js
+var require_kofi_logo = __commonJS({
+  "core/kofi-logo.js"(exports2, module2) {
+    module2.exports = ["svg", { "id": "Layer_1", "data-name": "Layer 1", "viewBox": "0 0 101 40" }, "", [["defs", {}, "", [["linearGradient", { "id": "cs-kofi-gradient", "x1": "9.55", "y1": "-1715.77", "x2": "13.7", "y2": "-1728.51", "gradientTransform": "matrix(1, 0, 0, -1, 4.26, -1707.68)", "gradientUnits": "userSpaceOnUse" }, "", [["stop", { "offset": "0", "stop-color": "#ff4ea3" }, "", []], ["stop", { "offset": "1", "stop-color": "#ff5e5b" }, "", []]]]]], ["title", {}, "Kofi_Logo_Blue", []], ["circle", { "cx": "20.4", "cy": "20", "r": "19.7", "fill": "#00b9fe" }, "", []], ["g", { "id": "Layer_1-2", "data-name": "Layer 1-2" }, "", [["g", { "id": "Layer_1-3", "data-name": "Layer 1-3" }, "", [["path", { "d": "M30.4,21.9a15.48,15.48,0,0,1-2.2.1V14.8h1.5A3,3,0,0,1,32.2,16a3.57,3.57,0,0,1,.8,2.3A3.35,3.35,0,0,1,30.4,21.9Zm6.2-5a6.55,6.55,0,0,0-2.9-4.5A7.67,7.67,0,0,0,29.3,11H7.3a1.28,1.28,0,0,0-1.1,1.2v.3s-.1,9.7.1,15a3.29,3.29,0,0,0,3.3,3.1s10.1,0,14.9-.1h.7c2.8-.7,3-3.3,3-4.7C33.7,26,37.6,22.1,36.6,16.9Z", "fill": "#fff", "stroke": "#000", "stroke-linecap": "round", "stroke-linejoin": "round", "stroke-width": "1.14px" }, "", []], ["path", { "d": "M17,26.4c.3.1.4,0,.4,0s3.5-3.2,5.1-5.1c1.4-1.7,1.5-4.4-.9-5.5S17.2,17,17.2,17a3.94,3.94,0,0,0-5.5-.6l-.1.1c-1.2,1.3-.8,3.5.1,4.7a60.17,60.17,0,0,0,5.1,5Z", "fill": "#ff5e5b" }, "", []], ["path", { "d": "M17.2,26.5a.37.37,0,0,0,.3-.1s3.5-3.2,5.1-5.1c1.4-1.7,1.5-4.4-.9-5.5S17.3,17,17.3,17a3.94,3.94,0,0,0-5.5-.6l-.1.1c-1.2,1.3-.8,3.5.1,4.7A62.58,62.58,0,0,0,17,26.3C17,26.5,17.1,26.5,17.2,26.5Z", "fill": "url(#cs-kofi-gradient)" }, "", []]]]]], ["path", { "d": "M59.5,26.9a1.09,1.09,0,0,1,.1.5,1.61,1.61,0,0,1-.5,1.1,1.85,1.85,0,0,1-1.2.5c-.2,0-.4-.1-.6-.1a2.18,2.18,0,0,1-.5-.4l-5.5-7.2-2.4,2.3v4a1.5,1.5,0,0,1-.4,1.1,1.59,1.59,0,0,1-1.2.4,1.38,1.38,0,0,1-1.5-1.5V13a1.61,1.61,0,0,1,.5-1.1,1.29,1.29,0,0,1,1.2-.4A1.38,1.38,0,0,1,49,13v6.9L57.1,12a1.56,1.56,0,0,1,1.2-.6,1.23,1.23,0,0,1,1,.5,1.78,1.78,0,0,1,.4,1,1.39,1.39,0,0,1-.5,1L53.7,19l5.6,7.4A.76.76,0,0,1,59.5,26.9Z", "fill": "#26272a" }, "", []], ["path", { "d": "M73.6,26a6.67,6.67,0,0,1-2.5,2.5,7.26,7.26,0,0,1-7,0A6.67,6.67,0,0,1,61.6,26a7.65,7.65,0,0,1,0-7.2,6.67,6.67,0,0,1,2.5-2.5,7.06,7.06,0,0,1,6.9,0,7.47,7.47,0,0,1,2.5,2.5,6.44,6.44,0,0,1,.9,3.6A5.94,5.94,0,0,1,73.6,26ZM71,20.1a4.28,4.28,0,0,0-1.4-1.6,3.88,3.88,0,0,0-3.9,0A4,4,0,0,0,64.3,20a4.19,4.19,0,0,0-.5,2.2,5.45,5.45,0,0,0,.5,2.2,4,4,0,0,0,1.4,1.5,3.7,3.7,0,0,0,3.8,0,4,4,0,0,0,1.4-1.5,5.45,5.45,0,0,0,.5-2.2,4,4,0,0,0-.4-2.1Z", "fill": "#26272a" }, "", []], ["path", { "d": "M77.1,22.4a1.19,1.19,0,0,1-.4-1.1,2.1,2.1,0,0,1,.4-1.1,1.5,1.5,0,0,1,1.1-.4h4.4a1.38,1.38,0,0,1,1.5,1.5,1.78,1.78,0,0,1-.4,1,1.5,1.5,0,0,1-1.1.4H78.2A1.43,1.43,0,0,1,77.1,22.4Z", "fill": "#26272a" }, "", []], ["path", { "d": "M92.3,13.5a1.43,1.43,0,0,0-.3,1.1v1.2h2.3a1.37,1.37,0,0,1,1.4,1.4,1.37,1.37,0,0,1-1.4,1.4H92v8.9a1.5,1.5,0,0,1-.4,1.1,1.57,1.57,0,0,1-2.2,0,1.5,1.5,0,0,1-.4-1.1V18.6H87.7a1.37,1.37,0,0,1-1.4-1.4,1.37,1.37,0,0,1,1.4-1.4h1.4V14.6a4,4,0,0,1,1.3-3.1,5.17,5.17,0,0,1,3.7-1.2,2.93,2.93,0,0,1,1.6.4,1.21,1.21,0,0,1,.7,1.2,1.69,1.69,0,0,1-.3,1,1.27,1.27,0,0,1-.9.4h-.6c-.3-.1-.7-.1-1-.2A1.7,1.7,0,0,0,92.3,13.5Zm5.3.1a1,1,0,0,1-.3-1v-.5a1.16,1.16,0,0,1,.4-1,2.66,2.66,0,0,1,1.2-.3,2.38,2.38,0,0,1,1.2.3,1.28,1.28,0,0,1,.4,1v.5a1.28,1.28,0,0,1-.4,1,2.77,2.77,0,0,1-1.3.3A2.66,2.66,0,0,1,97.6,13.6Zm2.3,15a1.19,1.19,0,0,1-1.1.4,1.38,1.38,0,0,1-1.5-1.5V17.1a1.5,1.5,0,0,1,.4-1.1,1.19,1.19,0,0,1,1.1-.4,1.38,1.38,0,0,1,1.5,1.5V27.5a1.19,1.19,0,0,1-.4,1.1Z", "fill": "#26272a" }, "", []]]];
+  }
+});
+
 // core/whats-new-modal.js
 var require_whats_new_modal = __commonJS({
   "core/whats-new-modal.js"(exports2, module2) {
@@ -4240,28 +4247,23 @@ var require_whats_new_modal = __commonJS({
         const support = content.createEl("div", { cls: "cs-whatsnew-support" });
         support.createEl("p", { text: "If Customization Studio is useful to you, you can support its development. It is optional, and every feature stays free." });
         const coffee = support.createEl("a", {
-          cls: "cs-bmc-button",
-          attr: { href: SUPPORT_URL, target: "_blank", rel: "noopener", "aria-label": "Buy me a coffee (opens Buy Me a Coffee)" }
+          cls: "cs-support-button",
+          attr: { href: SUPPORT_URL, target: "_blank", rel: "noopener", "aria-label": "Support on Ko-fi (opens Ko-fi)" }
         });
         const svgNs = "http://www.w3.org/2000/svg";
-        const doc = coffee.ownerDocument;
-        const svg = doc.createElementNS(svgNs, "svg");
-        svg.setAttribute("viewBox", "0 0 24 24");
-        svg.setAttribute("width", "20");
-        svg.setAttribute("height", "20");
+        const buildLogo = ([tag, attributes, text, children]) => {
+          const node = coffee.ownerDocument.createElementNS(svgNs, tag);
+          for (const [name, value] of Object.entries(attributes)) node.setAttribute(name, value);
+          if (text) node.textContent = text;
+          for (const child of children) node.appendChild(buildLogo(child));
+          return node;
+        };
+        const svg = buildLogo(require_kofi_logo());
+        svg.setAttribute("width", "76");
+        svg.setAttribute("height", "30");
         svg.setAttribute("aria-hidden", "true");
-        for (const [tag, attrs] of [
-          ["path", { d: "M5 8h12v5a5 5 0 0 1-5 5h-2a5 5 0 0 1-5-5z", fill: "#fff", stroke: "#0d0c22", "stroke-width": "1.8", "stroke-linejoin": "round" }],
-          ["path", { d: "M17 9h1.5a2.5 2.5 0 0 1 0 5H16.6", fill: "none", stroke: "#0d0c22", "stroke-width": "1.8", "stroke-linecap": "round" }],
-          ["path", { d: "M4 20.5h14", fill: "none", stroke: "#0d0c22", "stroke-width": "1.8", "stroke-linecap": "round" }],
-          ["path", { d: "M9 3.5c-.8 1 .8 1.5 0 2.5M13 3.5c-.8 1 .8 1.5 0 2.5", fill: "none", stroke: "#0d0c22", "stroke-width": "1.5", "stroke-linecap": "round" }]
-        ]) {
-          const node = doc.createElementNS(svgNs, tag);
-          for (const [name, value] of Object.entries(attrs)) node.setAttribute(name, value);
-          svg.appendChild(node);
-        }
         coffee.appendChild(svg);
-        coffee.createEl("span", { text: "Buy me a coffee" });
+        coffee.createEl("span", { text: "Support on Ko-fi" });
         const footer = content.createEl("div", { cls: "cs-whatsnew-footer" });
         const label = footer.createEl("label", { cls: "cs-whatsnew-optout" });
         const box = label.createEl("input", { attr: { type: "checkbox" } });
