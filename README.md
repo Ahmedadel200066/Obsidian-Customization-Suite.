@@ -17,9 +17,96 @@ settings, review schedules, Base definitions, or user content.
 
 ## Screenshots
 
-Screenshots are not available yet.
+Real-vault captures of the settings and Obsidian Bases card views. Vault sidebars
+and desktop notifications are cropped out. The older Bases examples use a
+bookshelf with English and Arabic titles; colors also depend on the active theme.
 
-<!-- Add verified screenshots here after capturing them in Obsidian. -->
+### Appearance
+
+Light-theme appearance controls, including accent, surface and text colors.
+
+![Appearance settings in a light theme](assets/screenshots/appearance-light.png)
+
+<details>
+<summary>Appearance in a dark theme</summary>
+
+The same appearance controls in a dark theme.
+
+![Appearance settings in a dark theme](assets/screenshots/appearance-dark.png)
+
+</details>
+
+### Plugin integrations
+
+<details open>
+<summary>Kanban settings</summary>
+
+Kanban card colors, corner radius and card spacing.
+
+![Kanban integration settings](assets/screenshots/kanban-settings-light.png)
+
+</details>
+
+<details>
+<summary>Dataview settings</summary>
+
+Dataview table styling, row height and header controls.
+
+![Dataview integration settings](assets/screenshots/dataview-settings-light.png)
+
+</details>
+
+<details>
+<summary>Obsidian Bases settings</summary>
+
+Bases card styling and the card-shape selector.
+
+![Obsidian Bases integration settings](assets/screenshots/bases-settings-light.png)
+
+</details>
+
+### Obsidian Bases gallery
+
+Standard cards in a light theme.
+
+![Standard Bases cards in a light theme](assets/screenshots/bases-standard-light.jpg)
+
+<details>
+<summary>More Bases card styles from earlier captures</summary>
+
+Book-style covers in a light theme.
+
+![Book-style Bases covers](assets/screenshots/bases-book-light.jpg)
+
+White-framed covers in a dark theme.
+
+![White-framed Bases covers](assets/screenshots/bases-framed-dark.jpg)
+
+Circle covers.
+
+![Circle Bases covers](assets/screenshots/bases-circle-dark.jpg)
+
+Spine covers, shown at an angle.
+
+![Spine Bases covers](assets/screenshots/bases-spine-dark.jpg)
+
+Polaroid covers with tilted white frames.
+
+![Polaroid Bases covers](assets/screenshots/bases-polaroid-dark.jpg)
+
+Trading-card covers with gold frames.
+
+![Trading-card Bases covers](assets/screenshots/bases-trading-card-dark.jpg)
+
+Disc covers with a record behind each cover.
+
+![Disc Bases covers](assets/screenshots/bases-disc-dark.jpg)
+
+Ticket covers with notched edges.
+
+![Ticket Bases covers](assets/screenshots/bases-ticket-dark.jpg)
+
+</details>
 
 ## Updates
 
